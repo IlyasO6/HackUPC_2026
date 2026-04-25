@@ -6,7 +6,7 @@ import os
 import sys
 
 from api_models import OptimizationInput, PlacedBay as ApiPlacedBay, SolveResult
-from config import ANGLE_STEP_DEGREES, FULL_TURN_DEGREES
+from api_config import ANGLE_STEP_DEGREES, FULL_TURN_DEGREES
 
 _BACKEND_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")

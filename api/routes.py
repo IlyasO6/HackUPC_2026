@@ -24,7 +24,7 @@ from api_models import (
     ScoreRequest,
 )
 from bridge import solution_to_api, to_case_data
-from config import API_VERSION, DEFAULT_SOLVER_TIME_BUDGET_SECONDS
+from api_config import API_VERSION, DEFAULT_SOLVER_TIME_BUDGET_SECONDS
 from csv_parser import parse_all
 from job_store import (
     cleanup_queue,

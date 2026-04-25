@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from api_models import LayoutBay, LayoutResponse
-from config import (
+from api_config import (
     ANGLE_STEP_DEGREES,
     FULL_TURN_DEGREES,
     LAYOUT_EMPTY_MESSAGE,

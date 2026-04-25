@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
-from config import SESSION_EXPIRY_SECONDS, SESSION_SWEEP_SECONDS
+from api_config import SESSION_EXPIRY_SECONDS, SESSION_SWEEP_SECONDS
 from layout_session import StatefulLayoutSession
 
 

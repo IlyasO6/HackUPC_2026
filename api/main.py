@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from config import API_VERSION
+from api_config import API_VERSION
 from routes import router
 from session_store import get_layout_session_store
 
