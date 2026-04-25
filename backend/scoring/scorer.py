@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from models.case_data import CaseData
 from models.solution import Solution
+from solver.layout import score_from_totals
 
 
 def compute_score(solution: Solution, case: CaseData) -> float:
@@ -37,8 +38,4 @@ def compute_score(solution: Solution, case: CaseData) -> float:
     if warehouse_area == 0 or total_loads == 0:
         return float("inf")
 
-    pct_area = total_bay_area / warehouse_area
-    price_per_load = total_price / total_loads
-    exponent = 2.0 - pct_area
-
-    return price_per_load ** exponent
+    return score_from_totals(total_bay_area, total_price, total_loads, warehouse_area)

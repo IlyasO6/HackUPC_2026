@@ -1,4 +1,4 @@
-"""Abstract solver interface — to be implemented in Phase 2."""
+"""Abstract solver interface for warehouse placement solvers."""
 
 from __future__ import annotations
 from abc import ABC, abstractmethod

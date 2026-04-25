@@ -1,159 +1,145 @@
 {
-  "case": "../testcases/Case1",
-  "score": -356.0979798657718,
+  "case": "testcases\\Case1",
+  "solver": "HybridSolver",
+  "score": 856.9836620430101,
   "valid": true,
   "violations": [],
-  "elapsed_seconds": 0.7059,
-  "num_bays": 23,
-  "coverage": 0.949,
-  "total_area": 94900000,
+  "elapsed_seconds": 26.7962,
+  "num_bays": 20,
+  "coverage": 0.85,
+  "total_area": 85000000,
   "warehouse_area": 100000000.0,
-  "total_price": 106400,
-  "total_loads": 298,
+  "total_price": 95180,
+  "total_loads": 268,
   "type_counts": {
-    "15": 15,
-    "13": 6,
-    "3": 1,
-    "9": 1
+    "15": 13,
+    "11": 1,
+    "13": 6
+  },
+  "rotation_counts": {
+    "90.0": 15,
+    "0.0": 5
   },
   "placements": [
     {
       "id": 15,
-      "x": 3000,
-      "y": 0,
-      "rotation": 90
+      "x": 4000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 4000,
-      "y": 0,
-      "rotation": 90
+      "x": 6000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 5000,
-      "y": 0,
-      "rotation": 90
+      "x": 7000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 6000,
-      "y": 0,
-      "rotation": 90
+      "x": 8000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 7000,
-      "y": 0,
-      "rotation": 90
+      "x": 9000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 8000,
-      "y": 0,
-      "rotation": 90
+      "x": 10000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 9000,
-      "y": 0,
-      "rotation": 90
+      "x": 3000.0,
+      "y": 5000.0,
+      "rotation": 0.0
     },
     {
       "id": 15,
-      "x": 3000,
-      "y": 4300,
-      "rotation": 90
+      "x": 3000.0,
+      "y": 6000.0,
+      "rotation": 0.0
     },
     {
       "id": 15,
-      "x": 4000,
-      "y": 4300,
-      "rotation": 90
+      "x": 3000.0,
+      "y": 7000.0,
+      "rotation": 0.0
     },
     {
       "id": 15,
-      "x": 5000,
-      "y": 4300,
-      "rotation": 90
+      "x": 3000.0,
+      "y": 8000.0,
+      "rotation": 0.0
     },
     {
       "id": 15,
-      "x": 6000,
-      "y": 4300,
-      "rotation": 90
+      "x": 3000.0,
+      "y": 9000.0,
+      "rotation": 0.0
     },
     {
       "id": 15,
-      "x": 7000,
-      "y": 4300,
-      "rotation": 90
+      "x": 9000.0,
+      "y": 5000.0,
+      "rotation": 90.0
     },
     {
       "id": 15,
-      "x": 8000,
-      "y": 4300,
-      "rotation": 90
+      "x": 10000.0,
+      "y": 5000.0,
+      "rotation": 90.0
     },
     {
-      "id": 15,
-      "x": 9000,
-      "y": 4300,
-      "rotation": 90
-    },
-    {
-      "id": 15,
-      "x": 3700,
-      "y": 8600,
-      "rotation": 0
+      "id": 11,
+      "x": 5000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 13,
-      "x": 0,
-      "y": 0,
-      "rotation": 90
+      "x": 1000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 13,
-      "x": 1000,
-      "y": 0,
-      "rotation": 90
+      "x": 2000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 13,
-      "x": 2000,
-      "y": 0,
-      "rotation": 90
+      "x": 3000.0,
+      "y": 0.0,
+      "rotation": 90.0
     },
     {
       "id": 13,
-      "x": 0,
-      "y": 4300,
-      "rotation": 90
+      "x": 1000.0,
+      "y": 5000.0,
+      "rotation": 90.0
     },
     {
       "id": 13,
-      "x": 1000,
-      "y": 4300,
-      "rotation": 90
+      "x": 2000.0,
+      "y": 5000.0,
+      "rotation": 90.0
     },
     {
       "id": 13,
-      "x": 2000,
-      "y": 4300,
-      "rotation": 90
-    },
-    {
-      "id": 3,
-      "x": 8000,
-      "y": 8600,
-      "rotation": 0
-    },
-    {
-      "id": 9,
-      "x": 0,
-      "y": 8600,
-      "rotation": 0
+      "x": 3000.0,
+      "y": 5000.0,
+      "rotation": 90.0
     }
   ]
 }

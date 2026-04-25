@@ -5,6 +5,14 @@ import math
 from dataclasses import dataclass, field
 
 
+def _fmt_num(value: float) -> str:
+    """Serialize numbers compactly for CSV/JSON-friendly logs."""
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
 @dataclass(frozen=True, slots=True)
 class PlacedBay:
     """A bay placed in the warehouse at arbitrary rotation.
@@ -14,13 +22,13 @@ class PlacedBay:
       - (width, 0) = front-left corner (x=width is the FRONT)
       - The gap extends outward from the front face (x=width edge)
 
-    Rotation is counter-clockwise in degrees [0, 180) around (0,0),
+    Rotation is counter-clockwise in degrees [0, 180] around (0,0),
     then translated to world position (x, y).
     """
     bay_type_id: int
-    x: int
-    y: int
-    rotation: float  # degrees, [0, 180)
+    x: float
+    y: float
+    rotation: float  # degrees, [0, 180]
 
     def _transform(self, lx: float, ly: float, cos_t: float, sin_t: float) -> tuple[float, float]:
         return (self.x + lx * cos_t - ly * sin_t,
@@ -66,7 +74,9 @@ class Solution:
     def to_csv(self, path: str) -> None:
         with open(path, "w") as f:
             for p in self.placements:
-                f.write(f"{p.bay_type_id}, {p.x}, {p.y}, {p.rotation}\n")
+                f.write(
+                    f"{p.bay_type_id}, {_fmt_num(p.x)}, {_fmt_num(p.y)}, {_fmt_num(p.rotation)}\n"
+                )
 
     @staticmethod
     def from_csv(path: str) -> "Solution":
@@ -78,7 +88,7 @@ class Solution:
                     continue
                 parts = [x.strip() for x in line.split(",")]
                 placements.append(PlacedBay(
-                    bay_type_id=int(parts[0]), x=int(parts[1]),
-                    y=int(parts[2]), rotation=float(parts[3]),
+                    bay_type_id=int(parts[0]), x=float(parts[1]),
+                    y=float(parts[2]), rotation=float(parts[3]),
                 ))
         return Solution(placements=placements)

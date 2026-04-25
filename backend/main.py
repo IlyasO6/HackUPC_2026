@@ -6,6 +6,10 @@ Usage:
 Options:
     --output FILE     Solution CSV path  (default: solution.csv)
     --json   FILE     JSON summary path  (default: none)
+    --time-budget S   Solver wall-clock budget in seconds (default: 29)
+    --angle-mode M    Solver angle mode: hybrid|fixed-step (default: hybrid)
+    --angle-step  D   Fixed angle step in degrees (default: 15)
+    --seed       N    Deterministic seed placeholder for tie-breaking (default: 0)
     --no-viz          Skip ASCII visualization
     --viz-width  N    ASCII viz width    (default: 100)
     --viz-height N    ASCII viz height   (default: 35)
@@ -21,7 +25,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from parsers.csv_parser import load_case
-from solver.greedy import GreedySolver
+from solver.hybrid import HybridSolver
 from validation.validator import validate_solution
 from scoring.scorer import compute_score
 from visualization import render_ascii
@@ -32,6 +36,10 @@ def _parse_args(argv: list[str]) -> dict:
         "case_dir": None,
         "output": "solution.csv",
         "json_path": None,
+        "time_budget": 29.0,
+        "angle_mode": "hybrid",
+        "angle_step": 15.0,
+        "seed": 0,
         "viz": True,
         "viz_width": 100,
         "viz_height": 35,
@@ -44,6 +52,14 @@ def _parse_args(argv: list[str]) -> dict:
             args["output"] = argv[i + 1]; i += 2
         elif a == "--json" and i + 1 < len(argv):
             args["json_path"] = argv[i + 1]; i += 2
+        elif a == "--time-budget" and i + 1 < len(argv):
+            args["time_budget"] = float(argv[i + 1]); i += 2
+        elif a == "--angle-mode" and i + 1 < len(argv):
+            args["angle_mode"] = argv[i + 1]; i += 2
+        elif a == "--angle-step" and i + 1 < len(argv):
+            args["angle_step"] = float(argv[i + 1]); i += 2
+        elif a == "--seed" and i + 1 < len(argv):
+            args["seed"] = int(argv[i + 1]); i += 2
         elif a == "--no-viz":
             args["viz"] = False; i += 1
         elif a == "--viz-width" and i + 1 < len(argv):
@@ -80,9 +96,14 @@ def main() -> None:
               f"P/L={bt.price/bt.n_loads:>7.1f}")
 
     # ── 2. Solve ──────────────────────────────────────────────────
-    print("\n[2/4] Solving (greedy row-packing) ...")
+    print("\n[2/4] Solving with HybridSolver (axis sweep + row search + angle refinement) ...")
     t0 = time.perf_counter()
-    solver = GreedySolver()
+    solver = HybridSolver(
+        time_budget=args["time_budget"],
+        angle_mode=args["angle_mode"],
+        angle_step=args["angle_step"],
+        seed=args["seed"],
+    )
     solution = solver.solve(case)
     elapsed = time.perf_counter() - t0
     print(f"      Placed {len(solution.placements)} bays in {elapsed:.3f}s")
@@ -123,12 +144,17 @@ def main() -> None:
     # Bay type breakdown
     from collections import Counter
     type_counts = Counter(p.bay_type_id for p in solution.placements)
+    rotation_counts = Counter(round(p.rotation, 6) for p in solution.placements)
     if type_counts:
         print(f"      Breakdown   :")
         for tid, cnt in sorted(type_counts.items()):
             bt = bt_map.get(tid)
             label = f"{bt.width}x{bt.depth}" if bt else "?"
             print(f"        type {tid:>2} ({label:>9}): {cnt:>4} bays")
+    if rotation_counts:
+        print(f"      Rotations   :")
+        for rot, cnt in sorted(rotation_counts.items()):
+            print(f"        {rot:>6g}°: {cnt:>4} bays")
 
     # ── Output CSV ────────────────────────────────────────────────
     solution.to_csv(args["output"])
@@ -138,6 +164,7 @@ def main() -> None:
     if args["json_path"]:
         summary = {
             "case": case_dir,
+            "solver": "HybridSolver",
             "score": score,
             "valid": result.is_valid,
             "violations": result.violations,
@@ -149,6 +176,7 @@ def main() -> None:
             "total_price": total_price,
             "total_loads": total_loads,
             "type_counts": dict(type_counts),
+            "rotation_counts": dict(rotation_counts),
             "placements": [
                 {"id": p.bay_type_id, "x": p.x, "y": p.y, "rotation": p.rotation}
                 for p in solution.placements
