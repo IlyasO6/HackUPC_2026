@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Mecalux Smart Optimizer{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body class="min-h-screen bg-[#f4f6f8] text-[#222222]">
+    <div class="relative z-10">
+      <nav class="site-nav sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8">
+          <a href="{{ url_for('dashboard') }}" class="brand-lockup group flex items-center gap-3">
+            <span class="brand-mark flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#0066B3] bg-white text-xl font-black text-[#F58220] shadow-sm transition group-hover:scale-105">M</span>
+            <span>
+              <span class="block font-display text-lg font-bold leading-5 tracking-tight text-slate-950">Mecalux Smart Optimizer</span>
+              <span class="block text-xs font-semibold uppercase tracking-[0.22em] text-[#0066B3]">HackUPC 2026</span>
+            </span>
+          </a>
+
+          <div class="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex">
+            <a class="nav-link" href="#challenge">Challenge</a>
+            <a class="nav-link" href="#workflow">Workflow</a>
+            <a class="nav-link" href="#projects">Cases</a>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <span class="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700 sm:inline-flex" title="Backend URL: {{ backend_url }}">{{ backend_mode }} mode</span>
+            <a href="#projects" class="rounded-full bg-[#F58220] px-4 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-orange-500/20 hover:-translate-y-0.5 hover:bg-[#e87310]">Start</a>
+          </div>
+        </div>
+      </nav>
+
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
