@@ -213,6 +213,10 @@ If backend work continues, the best next step is:
 3. explicitly score non-cardinal angle candidates in residual pockets against cardinal fillers on the same local region
 4. keep using the current shared validation/rule engine as the single source of truth
 <<<<<<< HEAD
+<<<<<<< HEAD
  
 =======
 >>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
+=======
+ 
+>>>>>>> 6f555df68b269f0a4cc80df28cfdc29d31db4c8a
