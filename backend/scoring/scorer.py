@@ -1,8 +1,10 @@
-"""Score a solution using the Q metric.
+"""Score a solution using the corrected Q metric.
 
-    Q = (sum(bay_area) / warehouse_area) - (sum(price) / sum(loads))
+    Q = (sum_prices / sum_loads) ^ (2 - percentage_area_used)
 
-Higher is better.
+Lower Q is better. Minimizing Q means:
+  - Minimize price/loads ratio (cost-efficient bays)
+  - Maximize area coverage (brings exponent closer to 1)
 """
 
 from __future__ import annotations
@@ -12,12 +14,9 @@ from models.solution import Solution
 
 
 def compute_score(solution: Solution, case: CaseData) -> float:
-    """Compute the Q metric for a given solution.
-
-    Returns 0.0 for an empty solution (avoids division-by-zero).
-    """
+    """Compute Q metric. Returns float('inf') for empty/invalid solutions."""
     if not solution.placements:
-        return 0.0
+        return float("inf")
 
     bt_map = case.bay_type_map
     warehouse_area = case.warehouse.area
@@ -30,15 +29,16 @@ def compute_score(solution: Solution, case: CaseData) -> float:
         bt = bt_map.get(p.bay_type_id)
         if bt is None:
             continue
-        ew, ed = p.effective_dims(bt.width, bt.depth)
-        total_bay_area += ew * ed
+        # Use AABB of rotated bay for area (actual footprint area = width*depth regardless of rotation)
+        total_bay_area += bt.width * bt.depth
         total_price += bt.price
         total_loads += bt.n_loads
 
     if warehouse_area == 0 or total_loads == 0:
-        return 0.0
+        return float("inf")
 
-    area_ratio = total_bay_area / warehouse_area
-    cost_ratio = total_price / total_loads
+    pct_area = total_bay_area / warehouse_area
+    price_per_load = total_price / total_loads
+    exponent = 2.0 - pct_area
 
-    return area_ratio - cost_ratio
+    return price_per_load ** exponent
