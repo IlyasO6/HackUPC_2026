@@ -1,18 +1,21 @@
 function warehouseEditor(initialLayout, projectId) {
+  const geometry = window.LayoutGeometry;
+  const appConfig = window.APP_CONFIG || {};
   const CANVAS_W = 1000;
   const CANVAS_H = 650;
   const MARGIN = 35;
 
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value || {}));
+  }
+
   return {
-    layout: initialLayout,
-    warehouse: initialLayout.warehouse || { width: 10000, height: 6500 },
-    shelves: initialLayout.shelves || [],
-    obstacles: initialLayout.obstacles || [],
-    bayTypes: initialLayout.bayTypes || [],
-    ceiling: initialLayout.ceiling || [],
+    backendMode: appConfig.backendMode || "mock",
+    layout: {},
     saved: false,
     saving: false,
     saveError: null,
+    validationIssues: [],
 
     canvasW: CANVAS_W,
     canvasH: CANVAS_H,
@@ -20,462 +23,463 @@ function warehouseEditor(initialLayout, projectId) {
     dragOffsetX: 0,
     dragOffsetY: 0,
     selectedShelfId: null,
-    selectedBayTypeId: (initialLayout.bayTypes && initialLayout.bayTypes[0] && initialLayout.bayTypes[0].id) || null,
+    draftBay: {
+      label: "",
+      width: 1200,
+      depth: 800,
+      height: 2400,
+      gap: 200,
+      nLoads: 12,
+      price: 900,
+    },
+
+    init() {
+      this.layout = this.normalizeLayoutState(clone(initialLayout));
+      this.selectedShelfId = this.shelves[0]?.id || null;
+      this.seedDraftFromPreset(this.bayTypes[0] || null);
+    },
+
+    get isRealMode() {
+      return this.backendMode === "real";
+    },
+
+    get warehouse() {
+      return this.layout.warehouse || { polygon: [] };
+    },
+
+    get shelves() {
+      return this.layout.shelves || [];
+    },
+
+    get obstacles() {
+      return this.layout.obstacles || [];
+    },
+
+    get bayTypes() {
+      return this.layout.bayTypes || [];
+    },
+
+    get ceiling() {
+      return this.layout.ceiling || [];
+    },
 
     get selectedShelf() {
       return this.shelves.find((shelf) => shelf.id === this.selectedShelfId) || null;
     },
 
-    get selectedBayType() {
-      return this.bayTypes.find((bay) => String(bay.id) === String(this.selectedBayTypeId)) || this.bayTypes[0] || null;
-    },
-
     get gapSliderMax() {
-      const currentGap = this.selectedShelf ? this.shelfGap(this.selectedShelf) : 0;
-      return Math.max(1000, Math.ceil((currentGap + 250) / 100) * 100);
+      const currentGap = this.selectedShelf ? geometry.num(this.selectedShelf.gap) : 0;
+      return Math.max(1000, Math.ceil((currentGap + 300) / 100) * 100);
     },
 
     get polygon() {
-      if (this.warehouse.polygon && this.warehouse.polygon.length >= 3) {
-        return this.warehouse.polygon;
-      }
-      const width = Number(this.warehouse.width || 10000);
-      const height = Number(this.warehouse.height || 6500);
-      return [
-        { x: 0, y: 0 },
-        { x: width, y: 0 },
-        { x: width, y: height },
-        { x: 0, y: height },
-      ];
+      return geometry.warehousePolygon(this.warehouse);
+    },
+
+    get polygonLimits() {
+      const xs = this.polygon.map((point) => point.x);
+      const ys = this.polygon.map((point) => point.y);
+      return {
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+      };
     },
 
     get bounds() {
       const points = [...this.polygon];
-      this.obstacles.forEach((o) => {
-        points.push({ x: Number(o.x || 0), y: Number(o.y || 0) });
-        points.push({ x: Number(o.x || 0) + Number(o.w || o.width || 0), y: Number(o.y || 0) + Number(o.h || o.depth || 0) });
+      this.obstacles.forEach((obstacle) => {
+        geometry.obstaclePolygon(obstacle).forEach((point) => points.push(point));
       });
-      this.shelves.forEach((s) => {
-        this.rectCorners(s).forEach((corner) => points.push(corner));
+      this.shelves.forEach((shelf) => {
+        geometry.footprintPolygon(shelf).forEach((point) => points.push(point));
       });
 
-      const xs = points.map((p) => Number(p.x || 0));
-      const ys = points.map((p) => Number(p.y || 0));
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const minY = Math.min(...ys);
       const maxY = Math.max(...ys);
       const width = Math.max(1, maxX - minX);
       const height = Math.max(1, maxY - minY);
-      const scale = Math.min((CANVAS_W - 2 * MARGIN) / width, (CANVAS_H - 2 * MARGIN) / height);
+      const scale = Math.min(
+        (CANVAS_W - 2 * MARGIN) / width,
+        (CANVAS_H - 2 * MARGIN) / height
+      );
       const drawnW = width * scale;
       const drawnH = height * scale;
-      const offsetX = (CANVAS_W - drawnW) / 2;
-      const offsetY = (CANVAS_H - drawnH) / 2;
-
-      return { minX, maxX, minY, maxY, width, height, scale, offsetX, offsetY };
+      return {
+        minX,
+        minY,
+        maxX,
+        maxY,
+        width,
+        height,
+        scale,
+        offsetX: (CANVAS_W - drawnW) / 2,
+        offsetY: (CANVAS_H - drawnH) / 2,
+      };
     },
 
-    toScreenX(x) {
-      return this.screenX(x, this.bounds);
+    normalizeLayoutState(layout) {
+      const warehouse = layout.warehouse || {};
+      const polygon = geometry.warehousePolygon(warehouse);
+      const normalizedBayTypes = (layout.bayTypes || []).map((entry, index) =>
+        this.normalizeBayType(entry, index)
+      );
+      const normalizedShelves = (layout.shelves || []).map((entry, index) =>
+        this.normalizeShelf(entry, index, normalizedBayTypes)
+      );
+      return {
+        warehouse: {
+          polygon,
+          width: geometry.num(
+            warehouse.width,
+            Math.max(...polygon.map((point) => point.x)) -
+              Math.min(...polygon.map((point) => point.x))
+          ),
+          height: geometry.num(
+            warehouse.height,
+            Math.max(...polygon.map((point) => point.y)) -
+              Math.min(...polygon.map((point) => point.y))
+          ),
+          source: warehouse.source || "Manual project",
+        },
+        obstacles: (layout.obstacles || []).map((entry, index) => ({
+          id: String(entry.id || `obs-${index + 1}`),
+          x: geometry.num(entry.x),
+          y: geometry.num(entry.y),
+          w: geometry.num(entry.w ?? entry.width),
+          h: geometry.num(entry.h ?? entry.depth),
+        })),
+        ceiling: (layout.ceiling || []).map((entry) => ({
+          x: geometry.num(entry.x),
+          height: geometry.num(entry.height),
+        })),
+        bayTypes: this.mergeBayTypes(normalizedBayTypes, normalizedShelves),
+        shelves: normalizedShelves,
+        rawFiles: Array.isArray(layout.rawFiles) ? layout.rawFiles : [],
+      };
     },
 
-    toScreenY(y) {
-      return this.screenY(y, this.bounds);
+    normalizeBayType(entry, index) {
+      const bayId = String(entry.id || entry.label || `bay-type-${index + 1}`);
+      return {
+        id: bayId,
+        label: String(entry.label || bayId),
+        width: geometry.num(entry.width ?? entry.w, 1200),
+        depth: geometry.num(entry.depth ?? entry.h, 800),
+        height: geometry.num(entry.height, 2400),
+        gap: Math.max(0, geometry.num(entry.gap, 0)),
+        nLoads: geometry.num(entry.nLoads ?? entry.loads, 0),
+        price: geometry.num(entry.price, 0),
+      };
     },
 
-    toWorldX(x) {
-      return this.worldX(x, this.bounds);
+    normalizeShelf(entry, index, sourceBayTypes) {
+      const bayTypeId = String(
+        entry.bayTypeId || entry.typeId || entry.id || `custom-${index + 1}`
+      );
+      const bayType = sourceBayTypes.find(
+        (candidate) => String(candidate.id) === bayTypeId
+      ) || {};
+      return {
+        id: String(entry.id || `shelf-${Date.now()}-${index}`),
+        uid: String(entry.uid || entry.id || `shelf-${index + 1}`),
+        label: String(entry.label || bayType.label || bayTypeId),
+        bayTypeId,
+        x: geometry.num(entry.x),
+        y: geometry.num(entry.y),
+        w: geometry.num(entry.w ?? entry.width, bayType.width || 1200),
+        h: geometry.num(entry.h ?? entry.depth, bayType.depth || 800),
+        height: geometry.num(entry.height, bayType.height || 2400),
+        gap: Math.max(0, geometry.num(entry.gap, bayType.gap || 0)),
+        nLoads: geometry.num(entry.nLoads, bayType.nLoads || 0),
+        price: geometry.num(entry.price, bayType.price || 0),
+        rotation: geometry.normalizeAngle(entry.rotation || 0, 30),
+      };
     },
 
-    toWorldY(y) {
-      return this.worldY(y, this.bounds);
+    mergeBayTypes(bayTypes, shelves) {
+      const merged = bayTypes.map((entry) => ({ ...entry }));
+      const byId = new Map(merged.map((entry) => [String(entry.id), entry]));
+
+      shelves.forEach((shelf) => {
+        if (byId.has(String(shelf.bayTypeId))) {
+          return;
+        }
+        const derived = {
+          id: String(shelf.bayTypeId),
+          label: String(shelf.label || shelf.bayTypeId),
+          width: geometry.num(shelf.w),
+          depth: geometry.num(shelf.h),
+          height: geometry.num(shelf.height),
+          gap: geometry.num(shelf.gap),
+          nLoads: geometry.num(shelf.nLoads),
+          price: geometry.num(shelf.price),
+        };
+        merged.push(derived);
+        byId.set(String(derived.id), derived);
+      });
+
+      return merged;
     },
 
-    screenX(x, b) {
-      return b.offsetX + (Number(x || 0) - b.minX) * b.scale;
+    serializeLayout() {
+      return {
+        warehouse: this.warehouse,
+        obstacles: this.obstacles,
+        shelves: this.shelves,
+        ceiling: this.ceiling,
+        bayTypes: this.bayTypes,
+        rawFiles: this.layout.rawFiles || [],
+      };
     },
 
-    screenY(y, b) {
-      return b.offsetY + (Number(y || 0) - b.minY) * b.scale;
+    screenX(x, bounds) {
+      return bounds.offsetX + (geometry.num(x) - bounds.minX) * bounds.scale;
     },
 
-    worldX(x, b) {
-      return (Number(x || 0) - b.offsetX) / b.scale + b.minX;
+    screenY(y, bounds) {
+      return bounds.offsetY + (geometry.num(y) - bounds.minY) * bounds.scale;
     },
 
-    worldY(y, b) {
-      return (Number(y || 0) - b.offsetY) / b.scale + b.minY;
+    worldX(x, bounds) {
+      return (geometry.num(x) - bounds.offsetX) / bounds.scale + bounds.minX;
+    },
+
+    worldY(y, bounds) {
+      return (geometry.num(y) - bounds.offsetY) / bounds.scale + bounds.minY;
     },
 
     snap(value) {
-      const step = this.bounds.width > 2000 ? 100 : 25;
-      return Math.round(value / step) * step;
+      return Math.round(geometry.num(value) / 25) * 25;
     },
 
     warehousePolygonPoints() {
-      const b = this.bounds;
-      return this.polygon.map((p) => `${this.screenX(p.x, b)},${this.screenY(p.y, b)}`).join(" ");
+      const bounds = this.bounds;
+      return this.polygon
+        .map((point) => `${this.screenX(point.x, bounds)},${this.screenY(point.y, bounds)}`)
+        .join(" ");
     },
 
     rectStyle(item) {
-      const b = this.bounds;
-      const x = this.screenX(item.x, b);
-      const y = this.screenY(item.y, b);
-      const w = Number(item.w || item.width || 0) * b.scale;
-      const h = Number(item.h || item.depth || 0) * b.scale;
-      const rotation = Number(item.rotation || 0);
-      const transform = rotation ? ` transform: rotate(${rotation}deg); transform-origin: center center;` : "";
-      return `left:${x}px; top:${y}px; width:${w}px; height:${h}px;${transform}`;
-    },
-
-    shelfStyle(shelf) {
-      const b = this.bounds;
-      const x = this.screenX(shelf.x, b);
-      const y = this.screenY(shelf.y, b);
-      const footprint = this.shelfFootprintSize(shelf);
-      const rackDepth = this.itemSize(shelf).h * b.scale;
-      const gapDepth = this.shelfGap(shelf) * b.scale;
-      const rotation = Number(shelf.rotation || 0);
-      const transform = rotation ? ` transform: rotate(${rotation}deg); transform-origin: center center;` : "";
+      const bounds = this.bounds;
+      const x = this.screenX(item.x, bounds);
+      const y = this.screenY(item.y, bounds);
+      const w = geometry.num(item.w ?? item.width) * bounds.scale;
+      const h = geometry.num(item.h ?? item.depth) * bounds.scale;
       return [
         `left:${x}px`,
         `top:${y}px`,
-        `width:${footprint.w * b.scale}px`,
-        `height:${footprint.h * b.scale}px`,
-        `--rack-depth:${rackDepth}px`,
-        `--gap-depth:${gapDepth}px`,
-        transform,
+        `width:${w}px`,
+        `height:${h}px`,
       ].join("; ");
     },
 
-    unitCost(bay) {
-      const price = Number(bay.price || 0);
-      const loads = Number(bay.nLoads || bay.loads || 0);
-      if (!loads) return "-";
-      return (price / loads).toFixed(2);
+    shelfStyle(shelf) {
+      const bounds = this.bounds;
+      const dims = geometry.itemDimensions(shelf);
+      const footprint = geometry.footprintSize(shelf);
+      return [
+        `left:${this.screenX(shelf.x, bounds)}px`,
+        `top:${this.screenY(shelf.y, bounds)}px`,
+        `width:${footprint.w * bounds.scale}px`,
+        `height:${footprint.h * bounds.scale}px`,
+        `--rack-width:${dims.width * bounds.scale}px`,
+        `--gap-width:${dims.gap * bounds.scale}px`,
+        `transform:rotate(${geometry.normalizeAngle(shelf.rotation, 30)}deg)`,
+        "transform-origin: top left",
+      ].join("; ");
     },
 
     bayTypePreviewScale(bay) {
-      const w = Math.max(1, Number(bay.width || 1));
-      const h = Math.max(1, Number(bay.depth || bay.height || 1));
-      const footprintH = h + this.bayGap(bay);
-      return Math.min(76 / w, 46 / Math.max(1, footprintH));
+      const width = Math.max(1, geometry.num(bay.width));
+      const depth = Math.max(1, geometry.num(bay.depth));
+      const gap = Math.max(0, geometry.num(bay.gap));
+      return Math.min(86 / (width + gap), 44 / depth);
     },
 
     bayFootprintPreviewStyle(bay) {
-      const w = Math.max(1, Number(bay.width || 1));
-      const h = Math.max(1, Number(bay.depth || bay.height || 1));
-      const gap = this.bayGap(bay);
       const scale = this.bayTypePreviewScale(bay);
       return [
-        `width:${Math.max(16, w * scale)}px`,
-        `height:${Math.max(10, (h + gap) * scale)}px`,
-        `--preview-rack-depth:${Math.max(6, h * scale)}px`,
-        `--preview-gap-depth:${gap * scale}px`,
+        `width:${Math.max(22, (geometry.num(bay.width) + geometry.num(bay.gap)) * scale)}px`,
+        `height:${Math.max(10, geometry.num(bay.depth) * scale)}px`,
+        `--preview-rack-width:${Math.max(12, geometry.num(bay.width) * scale)}px`,
+        `--preview-gap-width:${Math.max(0, geometry.num(bay.gap) * scale)}px`,
       ].join("; ");
     },
 
-    bayGapPreviewStyle(bay) {
-      return `height:${this.bayGap(bay) * this.bayTypePreviewScale(bay)}px;`;
+    bayTypeMatchesDraft(bay) {
+      return String(bay.id) === String(this.draftBay.label || "");
     },
 
-    bayRackPreviewStyle(bay) {
-      const h = Math.max(1, Number(bay.depth || bay.height || 1));
-      return `height:${Math.max(6, h * this.bayTypePreviewScale(bay))}px;`;
+    conflictMessageFor(shelf, ignoreId = null) {
+      return geometry.firstViolation(
+        shelf,
+        this.shelves,
+        this.obstacles,
+        this.warehouse,
+        ignoreId || shelf.id
+      );
     },
 
-
-    obstacleLabel(obs) {
-      return obs.id || obs.label || "Obstacle";
+    setPlacementError(message) {
+      this.saveError = message || null;
     },
 
-    itemSize(item) {
-      return {
-        w: Number(item.w || item.width || 0),
-        h: Number(item.h || item.depth || 0),
+    seedDraftFromPreset(bay) {
+      if (!bay) {
+        return;
+      }
+      this.draftBay = {
+        label: String(bay.label || bay.id || ""),
+        width: geometry.num(bay.width, 1200),
+        depth: geometry.num(bay.depth, 800),
+        height: geometry.num(bay.height, 2400),
+        gap: Math.max(0, geometry.num(bay.gap, 0)),
+        nLoads: geometry.num(bay.nLoads, 0),
+        price: geometry.num(bay.price, 0),
       };
     },
 
-    bayGap(bay) {
-      return Math.max(0, Number(bay.gap || 0));
+    applyPreset(bay) {
+      this.seedDraftFromPreset(bay);
+      this.saveError = null;
     },
 
-    shelfGap(shelf) {
-      return this.bayGap(shelf);
+    nextCustomBayTypeId(baseLabel) {
+      const sanitized = String(baseLabel || "custom")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "custom";
+      let candidate = sanitized;
+      let suffix = 2;
+      const existingIds = new Set(this.bayTypes.map((bay) => String(bay.id)));
+      while (existingIds.has(candidate)) {
+        candidate = `${sanitized}-${suffix}`;
+        suffix += 1;
+      }
+      return candidate;
     },
 
-    gapLabelVisible(shelf) {
-      return this.shelfGap(shelf) * this.bounds.scale > 18;
-    },
-
-    shelfFootprintSize(shelf) {
-      const size = this.itemSize(shelf);
-      return {
-        w: size.w,
-        h: size.h + this.shelfGap(shelf),
+    ensureDraftBayType() {
+      const draft = {
+        label: String(this.draftBay.label || "").trim() || "Custom",
+        width: Math.max(1, geometry.num(this.draftBay.width, 1200)),
+        depth: Math.max(1, geometry.num(this.draftBay.depth, 800)),
+        height: Math.max(0, geometry.num(this.draftBay.height, 2400)),
+        gap: Math.max(0, geometry.num(this.draftBay.gap, 0)),
+        nLoads: Math.max(0, geometry.num(this.draftBay.nLoads, 0)),
+        price: Math.max(0, geometry.num(this.draftBay.price, 0)),
       };
-    },
 
-    rectCorners(item) {
-      const { w, h } = this.shelfFootprintSize(item);
-      const x = Number(item.x || 0);
-      const y = Number(item.y || 0);
-      const rotation = (((Number(item.rotation || 0) % 360) + 360) % 360) * Math.PI / 180;
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const local = [
-        [-w / 2, -h / 2],
-        [ w / 2, -h / 2],
-        [ w / 2,  h / 2],
-        [-w / 2,  h / 2],
-      ];
-      const cos = Math.cos(rotation);
-      const sin = Math.sin(rotation);
-      return local.map(([dx, dy]) => ({
-        x: cx + dx * cos - dy * sin,
-        y: cy + dx * sin + dy * cos,
-      }));
-    },
-
-    obstacleCorners(obs) {
-      return [
-        { x: Number(obs.x || 0), y: Number(obs.y || 0) },
-        { x: Number(obs.x || 0) + Number(obs.w || obs.width || 0), y: Number(obs.y || 0) },
-        { x: Number(obs.x || 0) + Number(obs.w || obs.width || 0), y: Number(obs.y || 0) + Number(obs.h || obs.depth || 0) },
-        { x: Number(obs.x || 0), y: Number(obs.y || 0) + Number(obs.h || obs.depth || 0) },
-      ];
-    },
-
-    polygonEdges(poly) {
-      return poly.map((p, i) => [p, poly[(i + 1) % poly.length]]);
-    },
-
-    pointOnSegment(p, a, b) {
-      const eps = 1e-7;
-      const cross = (p.y - a.y) * (b.x - a.x) - (p.x - a.x) * (b.y - a.y);
-      if (Math.abs(cross) > eps) return false;
-      return p.x >= Math.min(a.x, b.x) - eps && p.x <= Math.max(a.x, b.x) + eps &&
-             p.y >= Math.min(a.y, b.y) - eps && p.y <= Math.max(a.y, b.y) + eps;
-    },
-
-    pointInWarehouse(p) {
-      const poly = this.polygon;
-      for (const [a, b] of this.polygonEdges(poly)) {
-        if (this.pointOnSegment(p, a, b)) return true;
+      const exactMatch = this.bayTypes.find((bay) =>
+        geometry.num(bay.width) === draft.width &&
+        geometry.num(bay.depth) === draft.depth &&
+        geometry.num(bay.height) === draft.height &&
+        geometry.num(bay.gap) === draft.gap &&
+        geometry.num(bay.nLoads) === draft.nLoads &&
+        geometry.num(bay.price) === draft.price &&
+        String(bay.label || bay.id) === draft.label
+      );
+      if (exactMatch) {
+        return exactMatch;
       }
-      let inside = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const pi = poly[i];
-        const pj = poly[j];
-        const intersects = ((pi.y > p.y) !== (pj.y > p.y)) &&
-          (p.x < (pj.x - pi.x) * (p.y - pi.y) / ((pj.y - pi.y) || 1e-12) + pi.x);
-        if (intersects) inside = !inside;
-      }
-      return inside;
+
+      const bayId = this.nextCustomBayTypeId(draft.label);
+      const created = {
+        id: bayId,
+        label: draft.label,
+        width: draft.width,
+        depth: draft.depth,
+        height: draft.height,
+        gap: draft.gap,
+        nLoads: draft.nLoads,
+        price: draft.price,
+      };
+      this.layout.bayTypes = [...this.bayTypes, created];
+      return created;
     },
 
-    orientation(a, b, c) {
-      const v = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
-      if (Math.abs(v) < 1e-7) return 0;
-      return v > 0 ? 1 : 2;
-    },
+    firstFreePosition(template) {
+      const limits = this.polygonLimits;
+      const step = Math.max(100, this.snap(Math.min(template.w, template.h) / 2));
 
-    segmentsProperlyIntersect(a, b, c, d) {
-      const o1 = this.orientation(a, b, c);
-      const o2 = this.orientation(a, b, d);
-      const o3 = this.orientation(c, d, a);
-      const o4 = this.orientation(c, d, b);
-      return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
-    },
-
-    projection(poly, axis) {
-      const values = poly.map((p) => p.x * axis.x + p.y * axis.y);
-      return { min: Math.min(...values), max: Math.max(...values) };
-    },
-
-    polygonsOverlap(polyA, polyB) {
-      const eps = 1e-7;
-      const axes = [];
-      for (const poly of [polyA, polyB]) {
-        for (const [a, b] of this.polygonEdges(poly)) {
-          const edge = { x: b.x - a.x, y: b.y - a.y };
-          const length = Math.hypot(edge.x, edge.y) || 1;
-          axes.push({ x: -edge.y / length, y: edge.x / length });
+      for (let y = limits.minY; y <= limits.maxY; y += step) {
+        for (let x = limits.minX; x <= limits.maxX; x += step) {
+          const candidate = { ...template, x: this.snap(x), y: this.snap(y) };
+          if (!this.conflictMessageFor(candidate, candidate.id)) {
+            return { x: candidate.x, y: candidate.y };
+          }
         }
-      }
-      for (const axis of axes) {
-        const pa = this.projection(polyA, axis);
-        const pb = this.projection(polyB, axis);
-        if (pa.max <= pb.min + eps || pb.max <= pa.min + eps) return false;
-      }
-      return true;
-    },
-
-    shelfInsideWarehouse(shelf) {
-      const corners = this.rectCorners(shelf);
-      if (!corners.every((p) => this.pointInWarehouse(p))) return false;
-      const shelfEdges = this.polygonEdges(corners);
-      const whEdges = this.polygonEdges(this.polygon);
-      for (const [a, b] of shelfEdges) {
-        for (const [c, d] of whEdges) {
-          if (this.segmentsProperlyIntersect(a, b, c, d)) return false;
-        }
-      }
-      return true;
-    },
-
-    placementConflict(shelf, ignoreId = null) {
-      if (!this.shelfInsideWarehouse(shelf)) return "outside warehouse";
-      const shelfPoly = this.rectCorners(shelf);
-      for (const obs of this.obstacles) {
-        if (this.polygonsOverlap(shelfPoly, this.obstacleCorners(obs))) return `obstacle ${this.obstacleLabel(obs)}`;
-      }
-      for (const other of this.shelves) {
-        if (other.id === ignoreId || other.id === shelf.id) continue;
-        if (this.polygonsOverlap(shelfPoly, this.rectCorners(other))) return `shelf ${other.label || other.id}`;
       }
       return null;
     },
 
-    isValidPlacement(shelf, ignoreId = null) {
-      return !this.placementConflict(shelf, ignoreId);
-    },
-
-    setPlacementError(conflict) {
-      if (!conflict) {
-        this.saveError = null;
+    addShelf() {
+      const bayType = this.ensureDraftBayType();
+      const prototype = {
+        id: `shelf-${Date.now()}`,
+        uid: `shelf-${Date.now()}`,
+        label: String(this.draftBay.label || bayType.label || bayType.id),
+        bayTypeId: String(bayType.id),
+        x: 0,
+        y: 0,
+        w: geometry.num(bayType.width),
+        h: geometry.num(bayType.depth),
+        height: geometry.num(bayType.height),
+        gap: geometry.num(bayType.gap),
+        nLoads: geometry.num(bayType.nLoads),
+        price: geometry.num(bayType.price),
+        rotation: 0,
+      };
+      const position = this.firstFreePosition(prototype);
+      if (!position) {
+        this.setPlacementError(
+          "No free valid space found for this bay. Adjust its measurements or clear shelves."
+        );
         return;
       }
-      this.saveError = `Invalid placement: collision with ${conflict}.`;
+
+      const shelf = { ...prototype, x: position.x, y: position.y };
+      this.layout.shelves = [...this.shelves, shelf];
+      this.selectedShelfId = shelf.id;
+      this.saved = false;
+      this.validationIssues = [];
+      this.setPlacementError(null);
     },
 
-    selectBayType(bay) {
-      this.selectedBayTypeId = bay.id;
+    removeShelf(id) {
+      this.layout.shelves = this.shelves.filter((shelf) => shelf.id !== id);
+      if (this.selectedShelfId === id) {
+        this.selectedShelfId = this.shelves[0]?.id || null;
+      }
+      this.saved = false;
+      this.validationIssues = [];
+      this.setPlacementError(null);
+    },
+
+    clearShelves() {
+      this.layout.shelves = [];
+      this.selectedShelfId = null;
+      this.saved = false;
+      this.validationIssues = [];
+      this.setPlacementError(null);
+    },
+
+    deleteSelectedShelf() {
+      if (!this.selectedShelf) {
+        return;
+      }
+      this.removeShelf(this.selectedShelf.id);
     },
 
     selectShelf(shelf) {
       this.selectedShelfId = shelf.id;
-      if (shelf.bayTypeId !== undefined && shelf.bayTypeId !== null) {
-        this.selectedBayTypeId = shelf.bayTypeId;
-      }
-    },
-
-    setSelectedRotation(value) {
-      const shelf = this.selectedShelf;
-      if (!shelf) return;
-      const previous = Number(shelf.rotation || 0);
-      let angle = Number(value || 0);
-      angle = ((Math.round(angle) % 360) + 360) % 360;
-      shelf.rotation = angle;
-
-      const conflict = this.placementConflict(shelf, shelf.id);
-      if (conflict) {
-        shelf.rotation = previous;
-        this.setPlacementError(conflict);
-        return;
-      }
-
-      this.saved = false;
-      this.saveError = null;
-    },
-
-    setSelectedGap(value) {
-      const shelf = this.selectedShelf;
-      if (!shelf) return;
-
-      const previous = this.shelfGap(shelf);
-      const gap = Math.max(0, Math.round(Number(value || 0)));
-      shelf.gap = gap;
-
-      const conflict = this.placementConflict(shelf, shelf.id);
-      if (conflict) {
-        shelf.gap = previous;
-        this.setPlacementError(conflict);
-        return;
-      }
-
-      this.saved = false;
-      this.saveError = null;
-    },
-
-    defaultShelfSize() {
-      const bay = this.selectedBayType;
-      if (bay) {
-        return {
-          w: Number(bay.width || 1200),
-          h: Number(bay.depth || 800),
-          label: `T${bay.id}`,
-          bayTypeId: bay.id,
-          height: Number(bay.height || 0),
-          gap: Number(bay.gap || 0),
-          nLoads: Number(bay.nLoads || 0),
-          price: Number(bay.price || 0),
-        };
-      }
-      return {
-        w: Math.max(500, Math.round(this.bounds.width * 0.12)),
-        h: Math.max(300, Math.round(this.bounds.height * 0.08)),
-        label: "S",
-        bayTypeId: null,
-      };
-    },
-
-    addShelf() {
-      const next = this.shelves.length + 1;
-      const size = this.defaultShelfSize();
-      const baseShelf = {
-        id: `shelf-${Date.now()}`,
-        w: size.w,
-        h: size.h,
-        rotation: 0,
-        label: size.label || String.fromCharCode(64 + ((next - 1) % 26) + 1),
-        bayTypeId: size.bayTypeId,
-        height: size.height,
-        gap: size.gap,
-        nLoads: size.nLoads,
-        price: size.price,
-      };
-
-      const step = Math.max(100, this.snap(Math.min(size.w, size.h) / 2));
-      const startX = this.bounds.minX + 100;
-      const startY = this.bounds.minY + 100;
-      const endX = this.bounds.maxX - size.w;
-      const endY = this.bounds.maxY - (size.h + Number(size.gap || 0));
-
-      for (let y = startY; y <= endY; y += step) {
-        for (let x = startX; x <= endX; x += step) {
-          const candidate = { ...baseShelf, x: this.snap(x), y: this.snap(y) };
-          if (this.isValidPlacement(candidate, candidate.id)) {
-            this.shelves.push(candidate);
-            this.selectedShelfId = candidate.id;
-            this.saved = false;
-            this.saveError = null;
-            return;
-          }
-        }
-      }
-
-      this.saveError = "No free valid space found for this bay type. Try a smaller bay or clear shelves.";
-    },
-
-    removeShelf(id) {
-      this.shelves = this.shelves.filter((shelf) => shelf.id !== id);
-      if (this.selectedShelfId === id) this.selectedShelfId = null;
-      this.saved = false;
-      this.saveError = null;
-    },
-
-    clearShelves() {
-      this.shelves = [];
-      this.selectedShelfId = null;
-      this.saved = false;
-      this.saveError = null;
-    },
-
-    deleteSelectedShelf() {
-      if (!this.selectedShelfId) return;
-      this.removeShelf(this.selectedShelfId);
     },
 
     startDrag(event, shelf) {
@@ -487,58 +491,101 @@ function warehouseEditor(initialLayout, projectId) {
       const scaleY = CANVAS_H / canvasRect.height;
       const mouseX = (event.clientX - canvasRect.left) * scaleX;
       const mouseY = (event.clientY - canvasRect.top) * scaleY;
-      const b = this.bounds;
-      this.dragOffsetX = mouseX - this.screenX(shelf.x, b);
-      this.dragOffsetY = mouseY - this.screenY(shelf.y, b);
+      const bounds = this.bounds;
+      this.dragOffsetX = mouseX - this.screenX(shelf.x, bounds);
+      this.dragOffsetY = mouseY - this.screenY(shelf.y, bounds);
     },
 
     dragShelf(event) {
-      if (!this.draggingShelfId) return;
-
-      const shelf = this.shelves.find((s) => s.id === this.draggingShelfId);
-      if (!shelf) return;
+      if (!this.draggingShelfId) {
+        return;
+      }
+      const shelf = this.shelves.find((entry) => entry.id === this.draggingShelfId);
+      if (!shelf) {
+        return;
+      }
 
       const canvasRect = this.$refs.canvas.getBoundingClientRect();
       const scaleX = CANVAS_W / canvasRect.width;
       const scaleY = CANVAS_H / canvasRect.height;
       const mouseX = (event.clientX - canvasRect.left) * scaleX;
       const mouseY = (event.clientY - canvasRect.top) * scaleY;
+      const bounds = this.bounds;
 
-      const b = this.bounds;
-      let newX = this.worldX(mouseX - this.dragOffsetX, b);
-      let newY = this.worldY(mouseY - this.dragOffsetY, b);
+      const previous = { x: shelf.x, y: shelf.y };
+      shelf.x = this.snap(this.worldX(mouseX - this.dragOffsetX, bounds));
+      shelf.y = this.snap(this.worldY(mouseY - this.dragOffsetY, bounds));
 
-      const footprint = this.shelfFootprintSize(shelf);
-      newX = Math.max(this.bounds.minX, Math.min(newX, this.bounds.maxX - footprint.w));
-      newY = Math.max(this.bounds.minY, Math.min(newY, this.bounds.maxY - footprint.h));
-
-      const oldX = shelf.x;
-      const oldY = shelf.y;
-      shelf.x = this.snap(newX);
-      shelf.y = this.snap(newY);
-
-      const conflict = this.placementConflict(shelf, shelf.id);
+      const conflict = this.conflictMessageFor(shelf, shelf.id);
       if (conflict) {
-        shelf.x = oldX;
-        shelf.y = oldY;
+        shelf.x = previous.x;
+        shelf.y = previous.y;
         this.setPlacementError(conflict);
         return;
       }
 
       this.saved = false;
-      this.saveError = null;
+      this.validationIssues = [];
+      this.setPlacementError(null);
     },
 
     stopDrag() {
       this.draggingShelfId = null;
     },
 
+    setSelectedRotation(value) {
+      const shelf = this.selectedShelf;
+      if (!shelf) {
+        return;
+      }
+      const previous = shelf.rotation;
+      shelf.rotation = geometry.normalizeAngle(value, 30);
+      const conflict = this.conflictMessageFor(shelf, shelf.id);
+      if (conflict) {
+        shelf.rotation = previous;
+        this.setPlacementError(conflict);
+        return;
+      }
+      this.saved = false;
+      this.validationIssues = [];
+      this.setPlacementError(null);
+    },
+
+    setSelectedGap(value) {
+      const shelf = this.selectedShelf;
+      if (!shelf) {
+        return;
+      }
+      const previous = shelf.gap;
+      shelf.gap = Math.max(0, Math.round(geometry.num(value)));
+      const conflict = this.conflictMessageFor(shelf, shelf.id);
+      if (conflict) {
+        shelf.gap = previous;
+        this.setPlacementError(conflict);
+        return;
+      }
+
+      const matchingType = this.bayTypes.find(
+        (bay) => String(bay.id) === String(shelf.bayTypeId)
+      );
+      if (matchingType) {
+        matchingType.gap = shelf.gap;
+      }
+      this.saved = false;
+      this.validationIssues = [];
+      this.setPlacementError(null);
+    },
+
     async saveLayout() {
       this.saving = true;
-      this.saveError = null;
+      this.saved = false;
+      this.setPlacementError(null);
+      this.validationIssues = [];
 
-      for (const shelf of this.shelves) {
-        const conflict = this.placementConflict(shelf, shelf.id);
+      const layout = this.serializeLayout();
+
+      for (const shelf of layout.shelves) {
+        const conflict = this.conflictMessageFor(shelf, shelf.id);
         if (conflict) {
           this.saving = false;
           this.selectedShelfId = shelf.id;
@@ -547,29 +594,52 @@ function warehouseEditor(initialLayout, projectId) {
         }
       }
 
-      const payload = {
-        warehouse: this.warehouse,
-        obstacles: this.obstacles,
-        shelves: this.shelves,
-        ceiling: this.ceiling,
-        bayTypes: this.bayTypes,
-        rawFiles: this.layout.rawFiles || [],
-      };
+      if (this.isRealMode) {
+        try {
+          const validationResponse = await fetch("/api/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project_id: projectId, layout }),
+          });
+          const validation = await validationResponse.json();
+          if (!validationResponse.ok) {
+            throw new Error(validation.error || "Could not validate layout");
+          }
+          if (!validation.is_valid) {
+            this.validationIssues = validation.issues || [];
+            const invalidId = validation.invalid_bay_ids?.[0];
+            if (invalidId) {
+              this.selectedShelfId = invalidId;
+            }
+            this.setPlacementError(
+              validation.issues?.[0]?.message ||
+                validation.issues?.[0] ||
+                "Layout is invalid."
+            );
+            this.saving = false;
+            return;
+          }
+        } catch (error) {
+          this.saving = false;
+          this.setPlacementError(error.message || "Could not validate layout");
+          return;
+        }
+      }
 
       try {
         const response = await fetch(`/api/layouts/${projectId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(layout),
         });
-
+        const payload = await response.json();
         if (!response.ok) {
-          throw new Error("Could not save layout");
+          throw new Error(payload.error || "Could not save layout");
         }
-
+        this.layout = this.normalizeLayoutState(payload.layout || layout);
         this.saved = true;
       } catch (error) {
-        this.saveError = error.message || "Could not save layout";
+        this.setPlacementError(error.message || "Could not save layout");
       } finally {
         this.saving = false;
       }

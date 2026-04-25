@@ -1,33 +1,54 @@
-"""
-Mecalux Warehouse Optimizer API — Main Application
+"""FastAPI entrypoint serving both API routes and the static frontend."""
 
-Single FastAPI service serving both the API endpoints and the static frontend.
-Run with: uvicorn main:app --reload --port 8000
-"""
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+import logging
 import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+from config import API_VERSION
 from routes import router
+from session_store import get_layout_session_store
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Start and stop the session-expiration task with the app lifecycle."""
+
+    store = get_layout_session_store()
+    await store.start()
+    try:
+        yield
+    finally:
+        await store.stop()
+
 
 app = FastAPI(
     title="Mecalux Warehouse Optimizer",
-    description="HackUPC 2026 — Optimize bay placement in warehouses",
-    version="1.0.0",
+    description="Interactive warehouse optimization and live editing",
+    version=API_VERSION,
+    lifespan=lifespan,
 )
 
-# CORS — allow frontend to call API if served from different origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Hackathon: accept all origins
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# API routes
 app.include_router(router)
 
-# Serve static frontend files (index.html, app.js, style.css)
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(static_dir):
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

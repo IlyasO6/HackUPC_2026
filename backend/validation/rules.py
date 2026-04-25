@@ -211,9 +211,10 @@ def overlap_aabbs(a: AABB, b: AABB) -> bool:
 def placement_violations(
     footprint: PlacedFootprint,
     ctx: CaseContext,
-    existing: list[PlacedFootprint],
+    existing: list[PlacedFootprint | None],
     state: LayoutState | None = None,
     extra: list[PlacedFootprint] | None = None,
+    skip_indices: set[int] | None = None,
 ) -> list[str]:
     violations: list[str] = []
     if not rotated_rect_inside_polygon(footprint.body, ctx.polygon):
@@ -246,7 +247,11 @@ def placement_violations(
             compare_ids.update(state.body_hash.query(footprint.gap_aabb))
         compare_ids.update(state.gap_hash.query(footprint.body_aabb))
     for idx in sorted(compare_ids):
+        if skip_indices and idx in skip_indices:
+            continue
         other = existing[idx]
+        if other is None:
+            continue
         if overlap_aabbs(footprint.body_aabb, other.body_aabb) and convex_polygons_overlap(footprint.body, other.body):
             violations.append("body overlaps another bay body")
             break
@@ -274,8 +279,16 @@ def placement_violations(
 def is_valid_placement(
     footprint: PlacedFootprint,
     ctx: CaseContext,
-    existing: list[PlacedFootprint],
+    existing: list[PlacedFootprint | None],
     state: LayoutState | None = None,
     extra: list[PlacedFootprint] | None = None,
+    skip_indices: set[int] | None = None,
 ) -> bool:
-    return not placement_violations(footprint, ctx, existing, state=state, extra=extra)
+    return not placement_violations(
+        footprint,
+        ctx,
+        existing,
+        state=state,
+        extra=extra,
+        skip_indices=skip_indices,
+    )

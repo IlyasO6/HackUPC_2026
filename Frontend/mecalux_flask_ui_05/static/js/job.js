@@ -1,46 +1,87 @@
 function jobMonitor(projectId, initialLayout) {
+  const geometry = window.LayoutGeometry;
+  const runtime = window.JobRuntimeHelpers || {};
+  const appConfig = window.APP_CONFIG || {};
   const CANVAS_W = 1000;
   const CANVAS_H = 650;
   const MARGIN = 35;
 
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value || {}));
+  }
+
   return {
-    layout: initialLayout || {},
+    backendMode: appConfig.backendMode || "mock",
+    layout: {},
     socket: null,
+    eventSource: null,
     jobId: null,
     status: "idle",
     progress: 0,
     running: false,
     result: null,
-    editableBays: [],
+    resultBays: [],
     selectedBayUid: null,
-    selectedBayTypeId: ((initialLayout || {}).bayTypes || [])[0]?.id || null,
     activeTool: "select",
     placementWarning: null,
-    viewBounds: null,
+    failureReason: null,
+    statusMessage: "",
+    evaluationTimer: null,
+    evaluationToken: 0,
     draggingBayUid: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
     pendingDragEvent: null,
     dragFrame: null,
+    liveMetrics: {
+      Q: null,
+      coverage: 0,
+      totalLoads: 0,
+      totalBayArea: 0,
+      warehouseArea: 0,
+      valid: true,
+      issues: [],
+      issueCount: 0,
+      source: "idle",
+    },
+    draftBay: {
+      label: "",
+      width: 1200,
+      depth: 800,
+      height: 2400,
+      gap: 200,
+      nLoads: 12,
+      price: 900,
+    },
 
     init() {
-      this.viewBounds = this.calculateBounds();
+      this.layout = this.normalizeLayoutState(clone(initialLayout));
+      this.seedDraftFromPreset(this.bayTypes[0] || null);
+      this.resultBays = (this.layout.shelves || []).map((bay, index) =>
+        this.normalizeBay(bay, index)
+      );
+      this.selectedBayUid = this.resultBays[0]?.uid || null;
+      this.refreshAfterEdit("local");
+    },
+
+    get isRealMode() {
+      return this.backendMode === "real";
     },
 
     get warehouse() {
-      return this.layout.warehouse || { width: 10000, height: 6500 };
+      return this.layout.warehouse || { polygon: [] };
     },
 
     get obstacles() {
       return this.layout.obstacles || [];
     },
 
-    get bayTypes() {
-      return this.layout.bayTypes || [];
+    get ceiling() {
+      return this.layout.ceiling || [];
     },
 
-    get resultBays() {
-      return this.editableBays;
+    get bayTypes() {
+      return this.layout.bayTypes || [];
     },
 
     get selectedBay() {
@@ -48,26 +89,20 @@ function jobMonitor(projectId, initialLayout) {
     },
 
     get selectedFootprintLabel() {
-      if (!this.selectedBay) return "";
-      const size = this.bayFootprintSize(this.selectedBay);
-      return `${Math.round(size.w)} x ${Math.round(size.h)} mm footprint`;
+      if (!this.selectedBay) {
+        return "";
+      }
+      const dims = geometry.itemDimensions(this.selectedBay);
+      return `${Math.round(dims.width)} x ${Math.round(dims.depth)} mm body - gap ${Math.round(dims.gap)} mm`;
     },
 
     get polygon() {
-      if (this.warehouse.polygon && this.warehouse.polygon.length >= 3) return this.warehouse.polygon;
-      const width = Number(this.warehouse.width || 10000);
-      const height = Number(this.warehouse.height || 6500);
-      return [
-        { x: 0, y: 0 },
-        { x: width, y: 0 },
-        { x: width, y: height },
-        { x: 0, y: height },
-      ];
+      return geometry.warehousePolygon(this.warehouse);
     },
 
     get polygonLimits() {
-      const xs = this.polygon.map((p) => Number(p.x || 0));
-      const ys = this.polygon.map((p) => Number(p.y || 0));
+      const xs = this.polygon.map((point) => point.x);
+      const ys = this.polygon.map((point) => point.y);
       return {
         minX: Math.min(...xs),
         maxX: Math.max(...xs),
@@ -77,36 +112,535 @@ function jobMonitor(projectId, initialLayout) {
     },
 
     get bounds() {
-      return this.viewBounds || this.calculateBounds();
-    },
-
-    calculateBounds() {
       const points = [...this.polygon];
-      this.obstacles.forEach((obs) => {
-        points.push({ x: Number(obs.x || 0), y: Number(obs.y || 0) });
-        points.push({
-          x: Number(obs.x || 0) + Number(obs.w || obs.width || 0),
-          y: Number(obs.y || 0) + Number(obs.h || obs.depth || 0),
-        });
+      this.obstacles.forEach((obstacle) => {
+        geometry.obstaclePolygon(obstacle).forEach((point) => points.push(point));
+      });
+      this.resultBays.forEach((bay) => {
+        geometry.footprintPolygon(bay).forEach((point) => points.push(point));
       });
 
-      const xs = points.map((p) => Number(p.x || 0));
-      const ys = points.map((p) => Number(p.y || 0));
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const minY = Math.min(...ys);
       const maxY = Math.max(...ys);
       const width = Math.max(1, maxX - minX);
       const height = Math.max(1, maxY - minY);
-      const scale = Math.min((CANVAS_W - 2 * MARGIN) / width, (CANVAS_H - 2 * MARGIN) / height);
+      const scale = Math.min(
+        (CANVAS_W - 2 * MARGIN) / width,
+        (CANVAS_H - 2 * MARGIN) / height
+      );
       const drawnW = width * scale;
       const drawnH = height * scale;
-
       return {
-        minX, minY, maxX, maxY, width, height, scale,
+        minX,
+        minY,
+        maxX,
+        maxY,
+        width,
+        height,
+        scale,
         offsetX: (CANVAS_W - drawnW) / 2,
         offsetY: (CANVAS_H - drawnH) / 2,
       };
+    },
+
+    get statusLabel() {
+      return String(this.status || "idle").toUpperCase();
+    },
+
+    get backendIssues() {
+      return this.liveMetrics.issues || [];
+    },
+
+    get qDisplay() {
+      if (this.liveMetrics.Q === null || this.liveMetrics.Q === undefined) {
+        return "--";
+      }
+      const value = Number(this.liveMetrics.Q);
+      return Number.isFinite(value) ? value.toFixed(4) : "--";
+    },
+
+    get coveragePercent() {
+      return (Number(this.liveMetrics.coverage || 0) * 100).toFixed(1);
+    },
+
+    get validityLabel() {
+      return this.liveMetrics.valid ? "Valid" : "Invalid";
+    },
+
+    get liveSourceLabel() {
+      const source = String(this.liveMetrics.source || "idle");
+      const labels = {
+        local: "Local check",
+        backend: "FastAPI score",
+        solver: "Solved layout",
+        idle: "Idle",
+      };
+      return labels[source] || source;
+    },
+
+    formatNumber(value, digits = 0) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return "--";
+      }
+      return numeric.toFixed(digits);
+    },
+
+    normalizeLayoutState(layout) {
+      const warehouse = layout.warehouse || {};
+      const polygon = geometry.warehousePolygon(warehouse);
+      const normalizedBayTypes = (layout.bayTypes || []).map((entry, index) =>
+        this.normalizeBayType(entry, index)
+      );
+      return {
+        warehouse: {
+          polygon,
+          width: geometry.num(
+            warehouse.width,
+            Math.max(...polygon.map((point) => point.x)) -
+              Math.min(...polygon.map((point) => point.x))
+          ),
+          height: geometry.num(
+            warehouse.height,
+            Math.max(...polygon.map((point) => point.y)) -
+              Math.min(...polygon.map((point) => point.y))
+          ),
+          source: warehouse.source || "Manual project",
+        },
+        obstacles: (layout.obstacles || []).map((entry, index) => ({
+          id: String(entry.id || `obs-${index + 1}`),
+          x: geometry.num(entry.x),
+          y: geometry.num(entry.y),
+          w: geometry.num(entry.w ?? entry.width),
+          h: geometry.num(entry.h ?? entry.depth),
+        })),
+        ceiling: (layout.ceiling || []).map((entry) => ({
+          x: geometry.num(entry.x),
+          height: geometry.num(entry.height),
+        })),
+        bayTypes: this.mergeBayTypes(
+          normalizedBayTypes,
+          (layout.shelves || []).map((entry, index) =>
+            this.normalizeBay(entry, index, normalizedBayTypes)
+          )
+        ),
+        shelves: (layout.shelves || []).map((entry, index) =>
+          this.normalizeBay(entry, index, normalizedBayTypes)
+        ),
+        rawFiles: Array.isArray(layout.rawFiles) ? layout.rawFiles : [],
+      };
+    },
+
+    normalizeBayType(entry, index) {
+      const bayId = String(entry.id || entry.label || `bay-type-${index + 1}`);
+      return {
+        id: bayId,
+        label: String(entry.label || bayId),
+        width: geometry.num(entry.width ?? entry.w, 1200),
+        depth: geometry.num(entry.depth ?? entry.h, 800),
+        height: geometry.num(entry.height, 2400),
+        gap: Math.max(0, geometry.num(entry.gap, 0)),
+        nLoads: geometry.num(entry.nLoads ?? entry.loads, 0),
+        price: geometry.num(entry.price, 0),
+      };
+    },
+
+    normalizeBay(entry, index, sourceBayTypes) {
+      const candidates = sourceBayTypes || this.bayTypes;
+      const bayTypeId = String(
+        entry.bayTypeId ||
+          entry.typeId ||
+          entry.backendBayTypeId ||
+          entry.id ||
+          `custom-${index + 1}`
+      );
+      const bayType = candidates.find(
+        (candidate) => String(candidate.id) === bayTypeId
+      ) || {};
+      return {
+        uid: String(entry.uid || entry.id || `bay-${index + 1}`),
+        id: String(entry.label || entry.id || bayType.label || bayTypeId),
+        label: String(entry.label || entry.id || bayType.label || bayTypeId),
+        bayTypeId,
+        backendBayTypeId: entry.backendBayTypeId || null,
+        x: geometry.num(entry.x),
+        y: geometry.num(entry.y),
+        w: geometry.num(entry.w ?? entry.width, bayType.width || 1200),
+        h: geometry.num(entry.h ?? entry.depth, bayType.depth || 800),
+        height: geometry.num(entry.height, bayType.height || 2400),
+        gap: Math.max(0, geometry.num(entry.gap, bayType.gap || 0)),
+        nLoads: geometry.num(entry.nLoads, bayType.nLoads || 0),
+        price: geometry.num(entry.price, bayType.price || 0),
+        rotation: geometry.normalizeAngle(entry.rotation || 0, 30),
+        isInvalid: Boolean(entry.isInvalid),
+        issues: Array.isArray(entry.issues) ? entry.issues : [],
+      };
+    },
+
+    mergeBayTypes(bayTypes, bays) {
+      const merged = bayTypes.map((entry) => ({ ...entry }));
+      const byId = new Map(merged.map((entry) => [String(entry.id), entry]));
+      bays.forEach((bay) => {
+        if (byId.has(String(bay.bayTypeId))) {
+          return;
+        }
+        const derived = {
+          id: String(bay.bayTypeId),
+          label: String(bay.label || bay.bayTypeId),
+          width: geometry.num(bay.w),
+          depth: geometry.num(bay.h),
+          height: geometry.num(bay.height),
+          gap: geometry.num(bay.gap),
+          nLoads: geometry.num(bay.nLoads),
+          price: geometry.num(bay.price),
+        };
+        merged.push(derived);
+        byId.set(String(derived.id), derived);
+      });
+      return merged;
+    },
+
+    serializeBays() {
+      return this.resultBays.map((bay) => ({
+        uid: bay.uid,
+        id: bay.id,
+        label: bay.label,
+        bayTypeId: bay.bayTypeId,
+        backendBayTypeId: bay.backendBayTypeId,
+        x: bay.x,
+        y: bay.y,
+        w: bay.w,
+        h: bay.h,
+        height: bay.height,
+        gap: bay.gap,
+        nLoads: bay.nLoads,
+        price: bay.price,
+        rotation: bay.rotation,
+      }));
+    },
+
+    serializeLayout() {
+      return {
+        warehouse: this.warehouse,
+        obstacles: this.obstacles,
+        ceiling: this.ceiling,
+        bayTypes: this.bayTypes,
+        shelves: this.serializeBays(),
+        rawFiles: this.layout.rawFiles || [],
+      };
+    },
+
+    issueText(issue) {
+      return issue?.message || String(issue || "");
+    },
+
+    issuesForBay(index, bayId, issues) {
+      return (issues || []).filter((issue) => {
+        if ((issue.invalid_bay_id || issue.invalidBayId) === bayId) {
+          return true;
+        }
+        const match = /Bay #(\d+)/.exec(this.issueText(issue));
+        return match ? Number(match[1]) === index : false;
+      });
+    },
+
+    localSummary() {
+      const issues = [];
+      const invalidBayIds = [];
+      let totalArea = 0;
+      let totalPrice = 0;
+      let totalLoads = 0;
+
+      this.resultBays.forEach((bay, index) => {
+        const violations = geometry.placementViolations(
+          bay,
+          this.resultBays,
+          this.obstacles,
+          this.warehouse,
+          bay.uid
+        );
+        if (violations.length) {
+          invalidBayIds.push(bay.uid);
+          violations.forEach((message) => {
+            issues.push({
+              bay_index: index,
+              invalid_bay_id: bay.uid,
+              message: `Bay #${index}: ${message}`,
+            });
+          });
+        }
+        totalArea += geometry.num(bay.w) * geometry.num(bay.h);
+        totalPrice += geometry.num(bay.price);
+        totalLoads += geometry.num(bay.nLoads);
+      });
+
+      const warehouseArea = geometry.polygonArea(this.polygon);
+      const coverage = warehouseArea > 0 ? totalArea / warehouseArea : 0;
+      let qValue = null;
+      if (totalLoads > 0 && warehouseArea > 0) {
+        qValue = Number((totalPrice / totalLoads) ** (2 - coverage));
+      }
+
+      return {
+        Q: qValue,
+        coverage,
+        total_loads: totalLoads,
+        total_bay_area: totalArea,
+        warehouse_area: warehouseArea,
+        num_bays: this.resultBays.length,
+        is_valid: invalidBayIds.length === 0,
+        issues,
+        invalid_bay_ids: invalidBayIds,
+        issue_count: issues.length,
+      };
+    },
+
+    applyValidationSummary(summary, source = "local") {
+      const invalidSet = new Set(summary.invalid_bay_ids || []);
+      this.resultBays = this.resultBays.map((bay, index) => ({
+        ...bay,
+        isInvalid: invalidSet.has(bay.uid),
+        issues: this.issuesForBay(index, bay.uid, summary.issues),
+      }));
+      this.layout.shelves = this.serializeBays();
+      this.liveMetrics = {
+        Q: summary.Q,
+        coverage: summary.coverage || 0,
+        totalLoads: summary.total_loads || 0,
+        totalBayArea: summary.total_bay_area || 0,
+        warehouseArea: summary.warehouse_area || 0,
+        valid: Boolean(summary.is_valid),
+        issues: summary.issues || [],
+        issueCount: summary.issue_count ?? (summary.issues || []).length,
+        source,
+      };
+      this.placementWarning = this.liveMetrics.valid
+        ? null
+        : this.issueText(this.liveMetrics.issues[0] || "");
+    },
+
+    refreshAfterEdit(source = "local") {
+      this.applyValidationSummary(this.localSummary(), source);
+      if (this.isRealMode) {
+        this.queueBackendEvaluation();
+      }
+    },
+
+    queueBackendEvaluation() {
+      clearTimeout(this.evaluationTimer);
+      this.evaluationTimer = setTimeout(() => this.evaluateAgainstBackend(), 220);
+    },
+
+    async evaluateAgainstBackend() {
+      if (!this.isRealMode) {
+        return;
+      }
+      const token = ++this.evaluationToken;
+      try {
+        const response = await fetch("/api/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_id: projectId,
+            layout: this.serializeLayout(),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Could not score the current layout");
+        }
+        if (token !== this.evaluationToken) {
+          return;
+        }
+        this.failureReason = null;
+        this.applyValidationSummary(payload, "backend");
+      } catch (error) {
+        if (token !== this.evaluationToken) {
+          return;
+        }
+        this.failureReason = error.message || "Could not score the current layout";
+      }
+    },
+
+    seedDraftFromPreset(bay) {
+      if (!bay) {
+        return;
+      }
+      this.draftBay = {
+        label: String(bay.label || bay.id || ""),
+        width: geometry.num(bay.width, 1200),
+        depth: geometry.num(bay.depth, 800),
+        height: geometry.num(bay.height, 2400),
+        gap: Math.max(0, geometry.num(bay.gap, 0)),
+        nLoads: geometry.num(bay.nLoads, 0),
+        price: geometry.num(bay.price, 0),
+      };
+    },
+
+    applyPreset(bay) {
+      this.seedDraftFromPreset(bay);
+    },
+
+    bayTypeMatchesDraft(bay) {
+      return String(bay.label || bay.id) === String(this.draftBay.label || "");
+    },
+
+    nextCustomBayTypeId(baseLabel) {
+      const sanitized = String(baseLabel || "custom")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "custom";
+      let candidate = sanitized;
+      let suffix = 2;
+      const existingIds = new Set(this.bayTypes.map((bay) => String(bay.id)));
+      while (existingIds.has(candidate)) {
+        candidate = `${sanitized}-${suffix}`;
+        suffix += 1;
+      }
+      return candidate;
+    },
+
+    ensureDraftBayType() {
+      const draft = {
+        label: String(this.draftBay.label || "").trim() || "Custom",
+        width: Math.max(1, geometry.num(this.draftBay.width, 1200)),
+        depth: Math.max(1, geometry.num(this.draftBay.depth, 800)),
+        height: Math.max(0, geometry.num(this.draftBay.height, 2400)),
+        gap: Math.max(0, geometry.num(this.draftBay.gap, 0)),
+        nLoads: Math.max(0, geometry.num(this.draftBay.nLoads, 0)),
+        price: Math.max(0, geometry.num(this.draftBay.price, 0)),
+      };
+
+      const exactMatch = this.bayTypes.find((bay) =>
+        geometry.num(bay.width) === draft.width &&
+        geometry.num(bay.depth) === draft.depth &&
+        geometry.num(bay.height) === draft.height &&
+        geometry.num(bay.gap) === draft.gap &&
+        geometry.num(bay.nLoads) === draft.nLoads &&
+        geometry.num(bay.price) === draft.price &&
+        String(bay.label || bay.id) === draft.label
+      );
+      if (exactMatch) {
+        return exactMatch;
+      }
+
+      const bayId = this.nextCustomBayTypeId(draft.label);
+      const created = {
+        id: bayId,
+        label: draft.label,
+        width: draft.width,
+        depth: draft.depth,
+        height: draft.height,
+        gap: draft.gap,
+        nLoads: draft.nLoads,
+        price: draft.price,
+      };
+      this.layout.bayTypes = [...this.bayTypes, created];
+      return created;
+    },
+
+    firstFreePosition(template) {
+      const limits = this.polygonLimits;
+      const step = Math.max(100, this.snap(Math.min(template.w, template.h) / 2));
+      for (let y = limits.minY; y <= limits.maxY; y += step) {
+        for (let x = limits.minX; x <= limits.maxX; x += step) {
+          const candidate = { ...template, x: this.snap(x), y: this.snap(y) };
+          const message = geometry.firstViolation(
+            candidate,
+            this.resultBays,
+            this.obstacles,
+            this.warehouse,
+            candidate.uid
+          );
+          if (!message) {
+            return { x: candidate.x, y: candidate.y };
+          }
+        }
+      }
+      return null;
+    },
+
+    addShelf() {
+      const bayType = this.ensureDraftBayType();
+      const prototype = this.normalizeBay(
+        {
+          uid: `bay-${Date.now()}`,
+          id: this.draftBay.label || bayType.label || bayType.id,
+          label: this.draftBay.label || bayType.label || bayType.id,
+          bayTypeId: String(bayType.id),
+          x: 0,
+          y: 0,
+          w: bayType.width,
+          h: bayType.depth,
+          height: bayType.height,
+          gap: bayType.gap,
+          nLoads: bayType.nLoads,
+          price: bayType.price,
+          rotation: 0,
+        },
+        this.resultBays.length + 1
+      );
+      const position = this.firstFreePosition(prototype);
+      if (!position) {
+        this.placementWarning =
+          "No free collision-safe position was found for this bay.";
+        return;
+      }
+
+      const created = { ...prototype, x: position.x, y: position.y };
+      this.resultBays = [...this.resultBays, created];
+      this.selectedBayUid = created.uid;
+      this.refreshAfterEdit("local");
+    },
+
+    removeBay(uid) {
+      this.resultBays = this.resultBays.filter((bay) => bay.uid !== uid);
+      this.selectedBayUid = this.resultBays[0]?.uid || null;
+      this.stopBayDrag();
+      this.refreshAfterEdit("local");
+    },
+
+    removeSelectedBay() {
+      if (!this.selectedBay) {
+        return;
+      }
+      this.removeBay(this.selectedBay.uid);
+    },
+
+    setTool(tool) {
+      this.activeTool = tool;
+      if (tool === "delete") {
+        this.stopBayDrag();
+      }
+    },
+
+    selectBay(bay) {
+      this.selectedBayUid = bay.uid;
+    },
+
+    screenX(x, bounds) {
+      return bounds.offsetX + (geometry.num(x) - bounds.minX) * bounds.scale;
+    },
+
+    screenY(y, bounds) {
+      return bounds.offsetY + (geometry.num(y) - bounds.minY) * bounds.scale;
+    },
+
+    worldX(x, bounds) {
+      return (geometry.num(x) - bounds.offsetX) / bounds.scale + bounds.minX;
+    },
+
+    worldY(y, bounds) {
+      return (geometry.num(y) - bounds.offsetY) / bounds.scale + bounds.minY;
+    },
+
+    snap(value) {
+      return Math.round(geometry.num(value) / 25) * 25;
     },
 
     layerMetrics() {
@@ -139,251 +673,115 @@ function jobMonitor(projectId, initialLayout) {
       };
     },
 
-    screenX(x, b) {
-      return b.offsetX + (Number(x || 0) - b.minX) * b.scale;
-    },
-
-    screenY(y, b) {
-      return b.offsetY + (Number(y || 0) - b.minY) * b.scale;
-    },
-
-    worldX(x, b) {
-      return (Number(x || 0) - b.offsetX) / b.scale + b.minX;
-    },
-
-    worldY(y, b) {
-      return (Number(y || 0) - b.offsetY) / b.scale + b.minY;
-    },
-
-    snap(value) {
-      const step = 25;
-      return Math.round(Number(value || 0) / step) * step;
-    },
-
     warehousePolygonPoints() {
-      const b = this.bounds;
-      return this.polygon.map((p) => `${this.screenX(p.x, b)},${this.screenY(p.y, b)}`).join(" ");
-    },
-
-    bayTypeFor(bay) {
-      return this.bayTypes.find((type) => String(type.id) === String(bay.bayTypeId || bay.id));
-    },
-
-    baySize(bay) {
-      const type = this.bayTypeFor(bay);
-      return {
-        w: Number(bay.w || bay.width || type?.width || 1200),
-        h: Number(bay.h || bay.depth || type?.depth || 800),
-      };
-    },
-
-    bayGap(bay) {
-      if (bay.gap !== undefined && bay.gap !== null) return Math.max(0, Number(bay.gap || 0));
-      return Math.max(0, Number(this.bayTypeFor(bay)?.gap || 0));
-    },
-
-    bayFootprintSize(bay) {
-      const size = this.baySize(bay);
-      return { w: size.w, h: size.h + this.bayGap(bay) };
-    },
-
-    rectCorners(item) {
-      const x = Number(item.x || 0);
-      const y = Number(item.y || 0);
-      const w = Number(item.w || item.width || 0);
-      const h = Number(item.h || item.depth || 0);
-      return [
-        { x, y },
-        { x: x + w, y },
-        { x: x + w, y: y + h },
-        { x, y: y + h },
-      ];
-    },
-
-    bayCorners(bay) {
-      const { w, h } = this.bayFootprintSize(bay);
-      const x = Number(bay.x || 0);
-      const y = Number(bay.y || 0);
-      const rotation = (((Number(bay.rotation || 0) % 360) + 360) % 360) * Math.PI / 180;
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const local = [
-        [-w / 2, -h / 2],
-        [ w / 2, -h / 2],
-        [ w / 2,  h / 2],
-        [-w / 2,  h / 2],
-      ];
-      const cos = Math.cos(rotation);
-      const sin = Math.sin(rotation);
-      return local.map(([dx, dy]) => ({
-        x: cx + dx * cos - dy * sin,
-        y: cy + dx * sin + dy * cos,
-      }));
-    },
-
-    pointOnSegment(p, a, b) {
-      const eps = 1e-7;
-      const cross = (p.y - a.y) * (b.x - a.x) - (p.x - a.x) * (b.y - a.y);
-      if (Math.abs(cross) > eps) return false;
-      return p.x >= Math.min(a.x, b.x) - eps && p.x <= Math.max(a.x, b.x) + eps &&
-        p.y >= Math.min(a.y, b.y) - eps && p.y <= Math.max(a.y, b.y) + eps;
-    },
-
-    polygonEdges(poly) {
-      return poly.map((p, i) => [p, poly[(i + 1) % poly.length]]);
-    },
-
-    polyBounds(poly) {
-      const xs = poly.map((p) => p.x);
-      const ys = poly.map((p) => p.y);
-      return {
-        minX: Math.min(...xs),
-        maxX: Math.max(...xs),
-        minY: Math.min(...ys),
-        maxY: Math.max(...ys),
-      };
-    },
-
-    boundsOverlap(a, b) {
-      return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
-    },
-
-    pointInWarehouse(point) {
-      const poly = this.polygon;
-      for (const [a, b] of this.polygonEdges(poly)) {
-        if (this.pointOnSegment(point, a, b)) return true;
-      }
-      let inside = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const pi = poly[i];
-        const pj = poly[j];
-        const intersects = ((pi.y > point.y) !== (pj.y > point.y)) &&
-          (point.x < (pj.x - pi.x) * (point.y - pi.y) / ((pj.y - pi.y) || 1e-12) + pi.x);
-        if (intersects) inside = !inside;
-      }
-      return inside;
-    },
-
-    orientation(a, b, c) {
-      const value = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
-      if (Math.abs(value) < 1e-7) return 0;
-      return value > 0 ? 1 : 2;
-    },
-
-    segmentsProperlyIntersect(a, b, c, d) {
-      const o1 = this.orientation(a, b, c);
-      const o2 = this.orientation(a, b, d);
-      const o3 = this.orientation(c, d, a);
-      const o4 = this.orientation(c, d, b);
-      return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
-    },
-
-    crossesWarehouseBoundary(poly) {
-      return this.polygonEdges(poly).some(([a, b]) => {
-        return this.polygonEdges(this.polygon).some(([c, d]) => this.segmentsProperlyIntersect(a, b, c, d));
-      });
-    },
-
-    projection(poly, axis) {
-      const values = poly.map((p) => p.x * axis.x + p.y * axis.y);
-      return { min: Math.min(...values), max: Math.max(...values) };
-    },
-
-    polygonsOverlap(polyA, polyB) {
-      const axes = [];
-      for (const poly of [polyA, polyB]) {
-        for (const [a, b] of this.polygonEdges(poly)) {
-          const edge = { x: b.x - a.x, y: b.y - a.y };
-          const length = Math.hypot(edge.x, edge.y) || 1;
-          axes.push({ x: -edge.y / length, y: edge.x / length });
-        }
-      }
-
-      for (const axis of axes) {
-        const a = this.projection(polyA, axis);
-        const b = this.projection(polyB, axis);
-        if (a.max <= b.min + 1e-7 || b.max <= a.min + 1e-7) return false;
-      }
-      return true;
-    },
-
-    placementConflict(candidate, ignoreUid = null) {
-      const corners = this.bayCorners(candidate);
-      const candidateBounds = this.polyBounds(corners);
-      if (!corners.every((corner) => this.pointInWarehouse(corner))) {
-        return "Furniture must stay inside the warehouse.";
-      }
-      if (this.crossesWarehouseBoundary(corners)) {
-        return "Furniture crosses the warehouse boundary.";
-      }
-
-      for (const obstacle of this.obstacles) {
-        const obstacleCorners = this.rectCorners(obstacle);
-        if (!this.boundsOverlap(candidateBounds, this.polyBounds(obstacleCorners))) continue;
-        if (this.polygonsOverlap(corners, obstacleCorners)) {
-          return "Collision with an obstacle.";
-        }
-      }
-
-      for (const bay of this.resultBays) {
-        if (bay.uid === ignoreUid) continue;
-        const bayCorners = this.bayCorners(bay);
-        if (!this.boundsOverlap(candidateBounds, this.polyBounds(bayCorners))) continue;
-        if (this.polygonsOverlap(corners, bayCorners)) {
-          return "Collision detected: furniture cannot overlap.";
-        }
-      }
-
-      return null;
+      const bounds = this.bounds;
+      return this.polygon
+        .map((point) => `${this.screenX(point.x, bounds)},${this.screenY(point.y, bounds)}`)
+        .join(" ");
     },
 
     rectStyle(item) {
-      const b = this.bounds;
-      const x = this.screenX(item.x, b);
-      const y = this.screenY(item.y, b);
-      const w = Number(item.w || item.width || 0) * b.scale;
-      const h = Number(item.h || item.depth || 0) * b.scale;
+      const bounds = this.bounds;
       return [
-        "left:0",
-        "top:0",
-        `width:${w}px`,
-        `height:${h}px`,
-        `transform:translate3d(${x}px, ${y}px, 0)`,
+        `left:${this.screenX(item.x, bounds)}px`,
+        `top:${this.screenY(item.y, bounds)}px`,
+        `width:${geometry.num(item.w ?? item.width) * bounds.scale}px`,
+        `height:${geometry.num(item.h ?? item.depth) * bounds.scale}px`,
       ].join("; ");
     },
 
     bayStyle(bay) {
-      const b = this.bounds;
-      const size = this.baySize(bay);
-      const footprint = this.bayFootprintSize(bay);
-      const x = this.screenX(bay.x, b);
-      const y = this.screenY(bay.y, b);
-      const w = footprint.w * b.scale;
-      const h = footprint.h * b.scale;
-      const gapPercent = footprint.h ? this.bayGap(bay) / footprint.h * 100 : 0;
-      const rackPercent = Math.max(0, 100 - gapPercent);
+      const bounds = this.bounds;
+      const dims = geometry.itemDimensions(bay);
+      const footprint = geometry.footprintSize(bay);
       return [
-        "left:0",
-        "top:0",
-        `width:${w}px`,
-        `height:${h}px`,
-        `--rack-depth:${rackPercent}%`,
-        `--gap-depth:${gapPercent}%`,
-        `transform:translate3d(${x}px, ${y}px, 0) rotate(${Number(bay.rotation || 0)}deg)`,
-        "transform-origin: center center",
+        `left:${this.screenX(bay.x, bounds)}px`,
+        `top:${this.screenY(bay.y, bounds)}px`,
+        `width:${footprint.w * bounds.scale}px`,
+        `height:${footprint.h * bounds.scale}px`,
+        `--rack-width:${dims.width * bounds.scale}px`,
+        `--gap-width:${dims.gap * bounds.scale}px`,
+        `transform:rotate(${geometry.normalizeAngle(bay.rotation, 30)}deg)`,
+        "transform-origin: top left",
       ].join("; ");
     },
 
-    setTool(tool) {
-      this.activeTool = tool;
-      if (tool === "delete") this.stopBayDrag();
+    bayFootprintPreviewStyle(bay) {
+      const width = Math.max(1, geometry.num(bay.width));
+      const depth = Math.max(1, geometry.num(bay.depth));
+      const gap = Math.max(0, geometry.num(bay.gap));
+      const scale = Math.min(86 / (width + gap), 44 / depth);
+      return [
+        `width:${Math.max(22, (width + gap) * scale)}px`,
+        `height:${Math.max(10, depth * scale)}px`,
+        `--preview-rack-width:${Math.max(12, width * scale)}px`,
+        `--preview-gap-width:${Math.max(0, gap * scale)}px`,
+      ].join("; ");
     },
 
-    selectBay(bay) {
-      this.selectedBayUid = bay.uid;
-      if (bay.bayTypeId !== undefined && bay.bayTypeId !== null) {
-        this.selectedBayTypeId = bay.bayTypeId;
+    updateBay(bayUid, mutator) {
+      const current = this.resultBays.find((bay) => bay.uid === bayUid);
+      if (!current) {
+        return false;
       }
+      const next = { ...current };
+      mutator(next);
+      next.rotation = geometry.normalizeAngle(next.rotation, 30);
+      if (!this.isRealMode) {
+        const conflict = geometry.firstViolation(
+          next,
+          this.resultBays,
+          this.obstacles,
+          this.warehouse,
+          bayUid
+        );
+        if (conflict) {
+          this.placementWarning = conflict;
+          return false;
+        }
+      }
+
+      this.resultBays = this.resultBays.map((bay) =>
+        bay.uid === bayUid ? { ...bay, ...next } : bay
+      );
+      this.selectedBayUid = bayUid;
+      this.refreshAfterEdit("local");
+      return true;
+    },
+
+    setSelectedPosition(axis, value) {
+      if (!this.selectedBay) {
+        return;
+      }
+      this.updateBay(this.selectedBay.uid, (bay) => {
+        bay[axis] = this.snap(value);
+      });
+    },
+
+    setSelectedRotation(value) {
+      if (!this.selectedBay) {
+        return;
+      }
+      this.updateBay(this.selectedBay.uid, (bay) => {
+        bay.rotation = geometry.normalizeAngle(value, 30);
+      });
+    },
+
+    rotateSelectedBy(delta) {
+      if (!this.selectedBay) {
+        return;
+      }
+      this.setSelectedRotation(geometry.num(this.selectedBay.rotation) + geometry.num(delta));
+    },
+
+    nudgeSelected(dx, dy) {
+      if (!this.selectedBay) {
+        return;
+      }
+      this.updateBay(this.selectedBay.uid, (bay) => {
+        bay.x = this.snap(geometry.num(bay.x) + geometry.num(dx) * 25);
+        bay.y = this.snap(geometry.num(bay.y) + geometry.num(dy) * 25);
+      });
     },
 
     handleBayPointerDown(event, bay) {
@@ -400,15 +798,19 @@ function jobMonitor(projectId, initialLayout) {
     startBayDrag(event, bay) {
       this.draggingBayUid = bay.uid;
       const point = this.eventToCanvas(event);
-      const b = this.bounds;
-      this.dragOffsetX = point.x - this.screenX(bay.x, b);
-      this.dragOffsetY = point.y - this.screenY(bay.y, b);
+      const bounds = this.bounds;
+      this.dragOffsetX = point.x - this.screenX(bay.x, bounds);
+      this.dragOffsetY = point.y - this.screenY(bay.y, bounds);
     },
 
     dragBay(event) {
-      if (!this.draggingBayUid) return;
+      if (!this.draggingBayUid) {
+        return;
+      }
       this.pendingDragEvent = event;
-      if (this.dragFrame) return;
+      if (this.dragFrame) {
+        return;
+      }
       this.dragFrame = requestAnimationFrame(() => {
         this.dragFrame = null;
         this.applyDragBay(this.pendingDragEvent);
@@ -416,29 +818,18 @@ function jobMonitor(projectId, initialLayout) {
     },
 
     applyDragBay(event) {
-      const bay = this.resultBays.find((item) => item.uid === this.draggingBayUid);
-      if (!bay || !event) return;
-
-      const point = this.eventToCanvas(event);
-      const b = this.bounds;
-      const size = this.bayFootprintSize(bay);
-      const limits = this.polygonLimits;
-
-      const candidate = {
-        ...bay,
-        x: Math.max(limits.minX, Math.min(this.snap(this.worldX(point.x - this.dragOffsetX, b)), limits.maxX - size.w)),
-        y: Math.max(limits.minY, Math.min(this.snap(this.worldY(point.y - this.dragOffsetY, b)), limits.maxY - size.h)),
-      };
-      if (candidate.x === bay.x && candidate.y === bay.y) return;
-      const conflict = this.placementConflict(candidate, bay.uid);
-      if (conflict) {
-        this.placementWarning = conflict;
+      const bay = this.resultBays.find((entry) => entry.uid === this.draggingBayUid);
+      if (!bay || !event) {
         return;
       }
-
-      bay.x = candidate.x;
-      bay.y = candidate.y;
-      this.placementWarning = null;
+      const point = this.eventToCanvas(event);
+      const bounds = this.bounds;
+      const nextX = this.snap(this.worldX(point.x - this.dragOffsetX, bounds));
+      const nextY = this.snap(this.worldY(point.y - this.dragOffsetY, bounds));
+      this.updateBay(bay.uid, (candidate) => {
+        candidate.x = nextX;
+        candidate.y = nextY;
+      });
     },
 
     stopBayDrag() {
@@ -450,175 +841,183 @@ function jobMonitor(projectId, initialLayout) {
       }
     },
 
-    updateSelected(mutator) {
-      const bay = this.selectedBay;
-      if (!bay) return false;
-      const previous = { ...bay };
-      mutator(bay);
-      const conflict = this.placementConflict(bay, bay.uid);
-      if (conflict) {
-        Object.assign(bay, previous);
-        this.placementWarning = conflict;
-        return false;
-      }
-      this.placementWarning = null;
-      return true;
-    },
-
-    setSelectedPosition(axis, value) {
-      this.updateSelected((bay) => {
-        bay[axis] = this.snap(value);
-      });
-    },
-
-    setSelectedRotation(value) {
-      this.updateSelected((bay) => {
-        bay.rotation = ((Math.round(Number(value || 0)) % 360) + 360) % 360;
-      });
-    },
-
-    rotateSelectedBy(delta) {
-      const bay = this.selectedBay;
-      if (!bay) return;
-      this.setSelectedRotation(Number(bay.rotation || 0) + Number(delta || 0));
-    },
-
-    nudgeSelected(dx, dy) {
-      const bay = this.selectedBay;
-      if (!bay) return;
-      const step = 25;
-      this.updateSelected((item) => {
-        item.x = this.snap(Number(bay.x || 0) + dx * step);
-        item.y = this.snap(Number(bay.y || 0) + dy * step);
-      });
-    },
-
-    normalizeBay(rawBay, index) {
-      const type = this.bayTypes.find((bay) => String(bay.id) === String(rawBay.bayTypeId || rawBay.id));
-      return {
-        ...rawBay,
-        uid: rawBay.uid || `bay-${Date.now()}-${index}`,
-        id: rawBay.id || rawBay.label || rawBay.bayTypeId || `F${index + 1}`,
-        bayTypeId: rawBay.bayTypeId || type?.id || rawBay.id || null,
-        x: Number(rawBay.x || 0),
-        y: Number(rawBay.y || 0),
-        w: Number(rawBay.w || rawBay.width || type?.width || 1200),
-        h: Number(rawBay.h || rawBay.depth || type?.depth || 800),
-        gap: Number(rawBay.gap ?? type?.gap ?? 0),
-        rotation: Number(rawBay.rotation || 0),
-      };
-    },
-
-    firstFreePosition(size) {
-      const limits = this.polygonLimits;
-      const step = Math.max(100, this.snap(Math.min(size.w, size.h) / 2));
-      const endX = limits.maxX - size.w;
-      const endY = limits.maxY - size.h;
-
-      for (let y = limits.minY + 100; y <= endY; y += step) {
-        for (let x = limits.minX + 100; x <= endX; x += step) {
-          const candidate = {
-            uid: "candidate",
-            x: this.snap(x),
-            y: this.snap(y),
-            w: size.w,
-            h: size.h,
-            gap: size.gap || 0,
-            rotation: 0,
-          };
-          if (!this.placementConflict(candidate)) return { x: candidate.x, y: candidate.y };
-        }
-      }
-
-      return null;
-    },
-
-    addShelf() {
-      const type = this.bayTypes.find((bay) => String(bay.id) === String(this.selectedBayTypeId)) || this.bayTypes[0];
-      if (!type) return;
-      const size = {
-        w: Number(type.width || 1200),
-        h: Number(type.depth || 800),
-        gap: Number(type.gap || 0),
-      };
-      const position = this.firstFreePosition(size);
-      if (!position) {
-        this.placementWarning = "No free collision-safe space found for this furniture type.";
-        return;
-      }
-
-      const bay = this.normalizeBay({
-        id: `T${type.id}`,
-        bayTypeId: type.id,
-        x: position.x,
-        y: position.y,
-        w: size.w,
-        h: size.h,
-        gap: size.gap,
-        rotation: 0,
-      }, this.resultBays.length);
-      this.editableBays.push(bay);
-      this.selectBay(bay);
-      this.activeTool = "move";
-      this.placementWarning = null;
-    },
-
-    removeBay(uid) {
-      this.editableBays = this.editableBays.filter((bay) => bay.uid !== uid);
-      if (this.selectedBayUid === uid) this.selectedBayUid = this.editableBays[0]?.uid || null;
-      this.stopBayDrag();
-      this.placementWarning = null;
-    },
-
-    removeSelectedBay() {
-      if (!this.selectedBay) return;
-      this.removeBay(this.selectedBay.uid);
-    },
-
     async runJob() {
       this.running = true;
       this.status = "queued";
       this.progress = 0;
+      this.failureReason = null;
       this.result = null;
-      this.editableBays = [];
-      this.selectedBayUid = null;
+      this.statusMessage = "Submitting layout...";
       this.placementWarning = null;
 
       if (this.socket) {
         this.socket.disconnect();
         this.socket = null;
       }
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
 
-      const response = await fetch("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projectId }),
-      });
+      try {
+        const response = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_id: projectId,
+            layout: this.serializeLayout(),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Could not create the optimization job");
+        }
+        const job = runtime.normalizeCreateJobPayload
+          ? runtime.normalizeCreateJobPayload(payload)
+          : payload;
+        this.jobId = job.id || job.job_id;
+        this.status = runtime.normalizeStatus
+          ? runtime.normalizeStatus(job.status)
+          : String(job.status || "queued").toLowerCase();
+        this.progress = Number(job.progress || 0);
+        this.statusMessage = job.message || "Optimization queued.";
+        this.running = true;
 
-      const job = await response.json();
-      this.jobId = job.id;
-      this.connectSocket(job.id);
+        if (this.isRealMode) {
+          this.connectEventSource(job.stream_url);
+        } else {
+          this.connectSocket(this.jobId);
+        }
+      } catch (error) {
+        this.running = false;
+        this.status = "failed";
+        this.failureReason = error.message || "Could not create the optimization job";
+        this.statusMessage = this.failureReason;
+      }
     },
 
     connectSocket(jobId) {
       this.socket = io();
       this.socket.emit("join_job", { job_id: jobId });
 
-      this.socket.on("job_update", (job) => {
-        if (job.id !== jobId) return;
-        this.status = job.status;
-        this.progress = job.progress;
-        this.running = job.status === "running" || job.status === "queued";
+      this.socket.on("job_update", (payload) => {
+        const next = runtime.applyStreamEvent
+          ? runtime.applyStreamEvent(this, payload)
+          : payload;
+        this.status = next.status || this.status;
+        this.progress = Number(next.progress || this.progress || 0);
+        this.running = Boolean(next.running);
+        this.statusMessage = next.message || this.statusMessage;
+        this.failureReason = next.error || null;
       });
 
       this.socket.on("job_result", (payload) => {
-        if (payload.job_id !== jobId) return;
-        this.result = payload.result;
-        const placed = payload.result.placed_bays || payload.result.placedBaysDetailed || [];
-        this.editableBays = placed.map((bay, index) => this.normalizeBay(bay, index));
-        this.selectedBayUid = this.editableBays[0]?.uid || null;
-        this.running = false;
+        if ((payload.job_id || payload.id) !== jobId) {
+          return;
+        }
+        this.handleCompletedResult(payload.result);
       });
+    },
+
+    connectEventSource(streamUrl) {
+      this.eventSource = new EventSource(streamUrl);
+
+      this.eventSource.onmessage = async (event) => {
+        let payload = null;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (error) {
+          return;
+        }
+
+        const next = runtime.applyStreamEvent
+          ? runtime.applyStreamEvent(this, payload)
+          : payload;
+        const eventName = String(payload.event || "").trim().toLowerCase();
+        this.status = next.status || this.status;
+        this.progress = Number(next.progress || this.progress || 0);
+        this.running = Boolean(next.running);
+        this.failureReason = next.error || null;
+        this.statusMessage = next.message || this.statusMessage;
+        if (next.message && this.status === "failed") {
+          this.placementWarning = next.message;
+        }
+
+        if (eventName === "job_completed" && payload.result) {
+          this.handleCompletedResult(payload.result);
+          this.eventSource.close();
+          this.eventSource = null;
+        }
+
+        if (eventName === "job_failed" || eventName === "job_canceled") {
+          this.running = false;
+          this.eventSource.close();
+          this.eventSource = null;
+        }
+      };
+
+      this.eventSource.onerror = async () => {
+        if (!this.running || !this.jobId) {
+          this.eventSource?.close();
+          this.eventSource = null;
+          return;
+        }
+        try {
+          const response = await fetch(`/api/jobs/${this.jobId}`);
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || "Could not refresh the job status");
+          }
+          this.status = runtime.normalizeStatus
+            ? runtime.normalizeStatus(payload.status)
+            : String(payload.status || "").toLowerCase();
+          this.progress = Number(payload.progress || 0);
+          this.running = ["queued", "running"].includes(this.status);
+          this.statusMessage = payload.message || this.statusMessage;
+          if (this.status === "completed") {
+            const resultResponse = await fetch(`/api/jobs/${this.jobId}/result`);
+            const resultPayload = await resultResponse.json();
+            if (resultResponse.ok) {
+              this.handleCompletedResult(resultPayload);
+            }
+            this.eventSource?.close();
+            this.eventSource = null;
+          }
+          if (this.status === "failed" || this.status === "canceled") {
+            this.failureReason = payload.error || payload.message || this.failureReason;
+            this.statusMessage = this.failureReason || this.statusMessage;
+            this.eventSource?.close();
+            this.eventSource = null;
+          }
+        } catch (error) {
+          this.failureReason = error.message || "The live progress stream disconnected.";
+          this.statusMessage = this.failureReason;
+          this.running = false;
+          this.eventSource?.close();
+          this.eventSource = null;
+        }
+      };
+    },
+
+    handleCompletedResult(result) {
+      this.result = result;
+      const placed = result?.placed_bays || [];
+      this.resultBays = placed.map((bay, index) => this.normalizeBay(bay, index));
+      this.selectedBayUid = this.resultBays[0]?.uid || null;
+      this.status = "completed";
+      this.progress = 100;
+      this.running = false;
+      this.failureReason = null;
+      this.statusMessage = "Optimization completed.";
+      const local = this.localSummary();
+      this.applyValidationSummary(
+        {
+          ...local,
+          Q: result?.Q ?? result?.score ?? local.Q,
+          coverage: result?.coverage ?? local.coverage,
+        },
+        "solver"
+      );
     },
   };
 }

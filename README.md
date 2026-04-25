@@ -1,15 +1,29 @@
 # HackUPC_2026
 
-Backend focus for the Mecalux warehouse optimizer.
+Integrated Mecalux warehouse layout optimizer with:
 
-## Backend Notes
-- Q is minimized with the corrected formula: `(sum_price / sum_loads) ** (2 - coverage)`.
-- Front gaps are one-sided and mandatory: they must stay inside the warehouse and clear of obstacles and other bay bodies.
-- The backend keeps the public entrypoints `load_case(...)`, `compute_score(...)`, `validate_solution(...)`, `Solution.to_csv(...)`, and `BaseSolver.solve(...)`.
-- The solver now supports `0°` through `180°`, including `180°` as a distinct front-gap direction from `0°`.
+- a Python backend solver using the shared geometric validation rules
+- a FastAPI layer that stores optimized layouts in a live in-memory session
+- a static frontend served by the same FastAPI app for drag, rotate, and
+  delete interactions
 
-## Working Baselines
-- `Case0`: `Q <= 2089.13`
-- `Case1`: `Q <= 1347.63`
-- `Case2`: `Q <= 4146.49`
-- `Case3`: finish under `30s` and remain valid
+## Run
+
+Start the whole stack with one command from the repository root:
+
+```bash
+uvicorn main:app --app-dir api --host 0.0.0.0 --port 8000
+```
+
+Then open `http://127.0.0.1:8000/`.
+
+## Notes
+
+- Q is minimized with the challenge formula
+  `(sum_price / sum_loads) ** (2 - coverage)`.
+- Live edits never call the heavy solver again; they update the in-memory
+  session and revalidate only the affected neighborhood.
+- Rotations are snapped to the discrete challenge lattice
+  `{0, 30, 60, ..., 330}`.
+- The solver performs an exact branch-and-bound pass on tiny candidate
+  frontiers and deterministic constructive refinement on larger cases.

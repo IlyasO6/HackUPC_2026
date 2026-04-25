@@ -1,93 +1,340 @@
 {% extends "base.html" %}
-{% block title %}Final Layout - Mecalux{% endblock %}
+{% block title %}Optimization Workspace - Mecalux{% endblock %}
 
 {% block content %}
-<div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="px-5 py-6 md:px-8">
-  <a href="{{ url_for('dashboard') }}" class="home-button fixed right-5 top-4 z-[60] rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-[#0066B3] shadow-lg shadow-slate-900/10 hover:-translate-y-0.5 hover:bg-blue-50 md:right-8">Home</a>
+<div
+  x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})'
+  class="px-5 py-6 md:px-8"
+>
+  <a
+    href="{{ url_for('dashboard') }}"
+    class="home-button fixed right-5 top-4 z-[60] rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-[#0066B3] shadow-lg shadow-slate-900/10 hover:-translate-y-0.5 hover:bg-blue-50 md:right-8"
+  >
+    Home
+  </a>
 
   <div class="final-layout-shell grid gap-5">
-    <aside class="layout-tools rounded-3xl border border-blue-100 bg-white/86 p-4 shadow-xl shadow-blue-900/5 backdrop-blur">
+    <aside
+      class="layout-tools rounded-3xl border border-blue-100 bg-white/86 p-4 shadow-xl shadow-blue-900/5 backdrop-blur"
+    >
       <div class="flex items-center justify-between gap-3">
-        <a href="{{ url_for('editor', project_id=project_id) }}" class="text-sm font-black text-[#4C91C6] hover:text-[#2f6f9f]">Back</a>
-        <span class="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black text-[#4C91C6]" x-text="status"></span>
+        <a
+          href="{{ url_for('editor', project_id=project_id) }}"
+          class="text-sm font-black text-[#4C91C6] hover:text-[#2f6f9f]"
+        >
+          Back
+        </a>
+        <span
+          class="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-[.18em] text-[#4C91C6]"
+          x-text="backendMode"
+        ></span>
       </div>
 
-      <button @click="runJob" :disabled="running" class="mt-4 w-full rounded-2xl bg-blue-500 px-4 py-3 font-bold hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50">
+      <div class="mt-4 flex items-start justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-black text-slate-900">
+            Optimization Workspace
+          </h1>
+          <p class="mt-1 text-sm text-slate-500">
+            In real mode, run jobs through FastAPI and keep score and
+            validation live while you edit the solved layout.
+          </p>
+        </div>
+        <span
+          class="rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[.18em]"
+          :class="liveMetrics.valid ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'"
+          x-text="validityLabel"
+        ></span>
+      </div>
+
+      <button
+        @click="runJob"
+        :disabled="running"
+        class="mt-4 w-full rounded-2xl bg-blue-500 px-4 py-3 font-bold text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+      >
         <span x-show="!running">Run optimization</span>
         <span x-show="running">Optimizing...</span>
       </button>
 
       <div class="mt-4">
-        <div class="mb-2 flex justify-between text-xs font-bold text-slate-400">
-          <span>Progress</span>
-          <span x-text="`${progress}%`"></span>
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <span
+            class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black uppercase tracking-[.16em] text-slate-600"
+            x-text="statusLabel"
+          ></span>
+          <span class="text-xs font-bold text-slate-500" x-text="`${progress}%`"></span>
         </div>
-        <div class="h-3 overflow-hidden rounded-full bg-slate-800">
-          <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-300" :style="`width: ${progress}%`"></div>
+        <div class="h-3 overflow-hidden rounded-full bg-slate-200">
+          <div
+            class="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-300"
+            :style="`width: ${progress}%`"
+          ></div>
+        </div>
+        <p
+          x-show="statusMessage"
+          class="mt-2 text-sm text-slate-500"
+          x-text="statusMessage"
+        ></p>
+      </div>
+
+      <template x-if="failureReason">
+        <div
+          class="status-banner mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <p class="font-black">Optimization failed</p>
+          <p class="mt-1" x-text="failureReason"></p>
+        </div>
+      </template>
+
+      <template x-if="placementWarning">
+        <div
+          class="status-banner mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+        >
+          <p class="font-black">Validation warning</p>
+          <p class="mt-1" x-text="placementWarning"></p>
+        </div>
+      </template>
+
+      <div class="metric-grid mt-5">
+        <div class="metric-card">
+          <span class="metric-label">Q</span>
+          <strong class="metric-value" x-text="qDisplay"></strong>
+          <span class="metric-note" x-text="liveSourceLabel"></span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Coverage</span>
+          <strong class="metric-value" x-text="`${coveragePercent}%`"></strong>
+          <span class="metric-note" x-text="`${formatNumber(liveMetrics.totalBayArea, 0)} / ${formatNumber(liveMetrics.warehouseArea, 0)} mm^2`"></span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Bays</span>
+          <strong class="metric-value" x-text="`${resultBays.length}`"></strong>
+          <span class="metric-note" x-text="`${formatNumber(liveMetrics.totalLoads, 0)} loads`"></span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Issues</span>
+          <strong class="metric-value" x-text="`${liveMetrics.issueCount}`"></strong>
+          <span class="metric-note">Backend score in real mode</span>
         </div>
       </div>
 
       <div class="mt-5 grid grid-cols-3 gap-2">
-        <button @click="setTool('select')" class="tool-chip" :class="activeTool === 'select' ? 'is-active' : ''">Select</button>
-        <button @click="setTool('move')" class="tool-chip" :class="activeTool === 'move' ? 'is-active' : ''">Move</button>
-        <button @click="setTool('delete')" class="tool-chip danger" :class="activeTool === 'delete' ? 'is-active' : ''">Delete</button>
+        <button
+          @click="setTool('select')"
+          class="tool-chip"
+          :class="activeTool === 'select' ? 'is-active' : ''"
+        >
+          Select
+        </button>
+        <button
+          @click="setTool('move')"
+          class="tool-chip"
+          :class="activeTool === 'move' ? 'is-active' : ''"
+        >
+          Move
+        </button>
+        <button
+          @click="setTool('delete')"
+          class="tool-chip danger"
+          :class="activeTool === 'delete' ? 'is-active' : ''"
+        >
+          Delete
+        </button>
       </div>
 
-      <div x-show="placementWarning" x-transition class="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-3 text-sm font-bold text-amber-100" x-text="placementWarning"></div>
-
-      <div class="mt-5 border-t border-blue-100 pt-4">
+      <section class="mt-5 border-t border-blue-100 pt-4">
         <div class="flex items-center justify-between gap-3">
-          <label class="text-xs font-black uppercase tracking-[.18em] text-[#4C91C6]">Add furniture</label>
-          <span class="text-xs font-bold text-slate-500" x-text="`${resultBays.length} placed`"></span>
+          <h2 class="font-black text-slate-900">Add bay by measurements</h2>
+          <span class="text-xs font-bold text-slate-500">
+            gap may overlap only gap
+          </span>
         </div>
-        <select x-model="selectedBayTypeId" class="mt-2 w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300">
+        <div class="manual-input-grid mt-4">
+          <label>
+            <span>Label</span>
+            <input
+              x-model="draftBay.label"
+              type="text"
+              placeholder="Custom bay"
+            />
+          </label>
+          <label>
+            <span>Width</span>
+            <input
+              x-model.number="draftBay.width"
+              type="number"
+              min="1"
+              step="25"
+            />
+          </label>
+          <label>
+            <span>Depth</span>
+            <input
+              x-model.number="draftBay.depth"
+              type="number"
+              min="1"
+              step="25"
+            />
+          </label>
+          <label>
+            <span>Height</span>
+            <input
+              x-model.number="draftBay.height"
+              type="number"
+              min="0"
+              step="25"
+            />
+          </label>
+          <label>
+            <span>Gap depth</span>
+            <input
+              x-model.number="draftBay.gap"
+              type="number"
+              min="0"
+              step="25"
+            />
+          </label>
+          <label>
+            <span>Loads</span>
+            <input
+              x-model.number="draftBay.nLoads"
+              type="number"
+              min="0"
+              step="1"
+            />
+          </label>
+          <label>
+            <span>Price</span>
+            <input
+              x-model.number="draftBay.price"
+              type="number"
+              min="0"
+              step="1"
+            />
+          </label>
+        </div>
+        <button
+          @click="addShelf"
+          class="mt-4 w-full rounded-2xl bg-emerald-500 px-4 py-3 font-bold text-emerald-950 hover:bg-emerald-400"
+        >
+          Add bay
+        </button>
+      </section>
+
+      <section class="mt-5 border-t border-blue-100 pt-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-black text-slate-900">Preset dimensions</h2>
+          <span class="text-xs font-bold text-slate-500" x-text="`${bayTypes.length} loaded`"></span>
+        </div>
+        <div x-show="bayTypes.length === 0" class="mt-3 rounded-2xl border border-dashed border-blue-100 p-3 text-sm text-slate-500">
+          Upload a challenge case or create a few custom bays first.
+        </div>
+        <div class="mt-3 max-h-48 space-y-2 overflow-auto pr-1">
           <template x-for="bay in bayTypes" :key="bay.id">
-            <option :value="bay.id" x-text="`Type ${bay.id} - ${bay.width} x ${bay.depth}`"></option>
+            <button
+              @click="applyPreset(bay)"
+              class="w-full rounded-2xl border p-3 text-left text-sm transition"
+              :class="bayTypeMatchesDraft(bay) ? 'border-orange-200 bg-orange-50 ring-2 ring-orange-200/60' : 'border-blue-100 bg-white hover:bg-blue-50'"
+            >
+              <div class="flex items-center gap-3">
+                <div class="grid h-16 w-28 place-items-center rounded-xl border border-blue-100 bg-slate-50">
+                  <div class="bay-footprint-preview" :style="bayFootprintPreviewStyle(bay)">
+                    <span class="bay-preview-rack"></span>
+                    <span
+                      x-show="Number(bay.gap || 0) > 0"
+                      class="bay-preview-gap"
+                    ></span>
+                  </div>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <b class="truncate text-slate-900" x-text="bay.label || bay.id"></b>
+                    <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700" x-text="`${formatNumber(bay.nLoads, 0)} loads`"></span>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-500">
+                    <span x-text="bay.width"></span> x
+                    <span x-text="bay.depth"></span> mm body - gap
+                    <span x-text="bay.gap || 0"></span>
+                  </p>
+                </div>
+              </div>
+            </button>
           </template>
-        </select>
-        <button @click="addShelf" class="mt-3 w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-black text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50" :disabled="bayTypes.length === 0">Add selected</button>
-      </div>
+        </div>
+      </section>
 
-      <div class="mt-5 border-t border-blue-100 pt-4">
+      <section class="mt-5 border-t border-blue-100 pt-4">
         <div class="flex items-center justify-between gap-3">
-          <h3 class="font-bold">Selected furniture</h3>
-          <button @click="removeSelectedBay" :disabled="!selectedBay" class="trash-icon-button rounded-xl px-3 py-1.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-40">Remove</button>
+          <h2 class="font-black text-slate-900">Selected bay</h2>
+          <button
+            @click="removeSelectedBay"
+            :disabled="!selectedBay"
+            class="trash-icon-button rounded-xl px-3 py-1.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Remove
+          </button>
         </div>
 
-        <div x-show="selectedBay" class="mt-3 space-y-4 text-sm text-slate-300">
-          <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+        <div x-show="selectedBay" class="mt-3 space-y-4 text-sm">
+          <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
             <div class="flex items-center justify-between gap-3">
-              <b class="truncate" x-text="selectedBay?.id"></b>
-              <span class="rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] font-bold text-blue-100" x-text="selectedBay?.bayTypeId || '-'"></span>
+              <b class="truncate text-slate-900" x-text="selectedBay?.label || selectedBay?.id"></b>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px] font-black"
+                :class="selectedBay?.isInvalid ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'"
+                x-text="selectedBay?.bayTypeId || '-'"
+              ></span>
             </div>
             <p class="mt-1 text-xs text-slate-500" x-text="selectedFootprintLabel"></p>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
             <label class="space-y-1">
-              <span class="text-xs text-slate-500">X</span>
-              <input type="number" :value="selectedBay?.x || 0" @change="setSelectedPosition('x', $event.target.value)" class="w-full rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-right font-bold outline-none focus:border-blue-300">
+              <span class="text-xs font-bold uppercase tracking-[.16em] text-slate-500">X</span>
+              <input
+                type="number"
+                :value="selectedBay?.x || 0"
+                @change="setSelectedPosition('x', $event.target.value)"
+                class="w-full rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-right font-bold text-slate-900 outline-none focus:border-blue-300"
+              />
             </label>
             <label class="space-y-1">
-              <span class="text-xs text-slate-500">Y</span>
-              <input type="number" :value="selectedBay?.y || 0" @change="setSelectedPosition('y', $event.target.value)" class="w-full rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-right font-bold outline-none focus:border-blue-300">
+              <span class="text-xs font-bold uppercase tracking-[.16em] text-slate-500">Y</span>
+              <input
+                type="number"
+                :value="selectedBay?.y || 0"
+                @change="setSelectedPosition('y', $event.target.value)"
+                class="w-full rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-right font-bold text-slate-900 outline-none focus:border-blue-300"
+              />
             </label>
           </div>
 
           <div>
             <label class="block text-xs font-black uppercase tracking-[.18em] text-orange-600">Angle</label>
-            <div class="mt-2 grid grid-cols-[1fr_72px] items-center gap-3">
-              <input type="range" min="0" max="359" step="1" :value="selectedBay?.rotation || 0" @input="setSelectedRotation($event.target.value)" class="angle-slider min-w-0 flex-1">
-              <input type="number" min="0" max="359" step="1" :value="selectedBay?.rotation || 0" @change="setSelectedRotation($event.target.value)" class="rounded-xl border border-orange-100 bg-white px-2 py-1.5 text-right text-sm font-bold text-orange-700 outline-none focus:border-orange-300">
+            <div class="mt-2 grid grid-cols-[1fr_84px] items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="330"
+                step="30"
+                :value="selectedBay?.rotation || 0"
+                @input="setSelectedRotation($event.target.value)"
+                class="angle-slider min-w-0 flex-1"
+              />
+              <input
+                type="number"
+                min="0"
+                max="330"
+                step="30"
+                :value="selectedBay?.rotation || 0"
+                @change="setSelectedRotation($event.target.value)"
+                class="rounded-xl border border-orange-100 bg-white px-2 py-1.5 text-right text-sm font-bold text-orange-700 outline-none focus:border-orange-300"
+              />
             </div>
             <div class="mt-2 grid grid-cols-4 gap-2">
               <template x-for="angle in [0, 90, 180, 270]" :key="angle">
-                <button @click="setSelectedRotation(angle)" class="tool-chip" x-text="angle"></button>
+                <button @click="setSelectedRotation(angle)" class="tool-chip" x-text="`${angle} deg`"></button>
               </template>
-            </div>
-            <div class="mt-2 grid grid-cols-2 gap-2">
-              <button @click="rotateSelectedBy(-15)" class="tool-chip">-15 deg</button>
-              <button @click="rotateSelectedBy(15)" class="tool-chip">+15 deg</button>
             </div>
           </div>
 
@@ -102,28 +349,88 @@
               <button @click="nudgeSelected(1, 0)" class="tool-chip">Right</button>
             </div>
           </div>
+
+          <template x-if="selectedBay?.issues?.length">
+            <div class="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <p class="font-black">Bay issues</p>
+              <ul class="issue-list mt-2">
+                <template x-for="issue in selectedBay.issues" :key="issue.message || issue">
+                  <li x-text="issue.message || issue"></li>
+                </template>
+              </ul>
+            </div>
+          </template>
         </div>
 
-        <p x-show="!selectedBay" class="mt-3 text-sm text-slate-500">Run optimization and select a furniture block to edit it.</p>
-      </div>
+        <p x-show="!selectedBay" class="mt-3 text-sm text-slate-500">
+          Select a bay from the list or canvas to move, rotate, or remove it.
+        </p>
+      </section>
 
-      <div class="mt-5 border-t border-blue-100 pt-4">
-        <h3 class="font-bold">Furniture list</h3>
+      <section class="mt-5 border-t border-blue-100 pt-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-black text-slate-900">Validation issues</h2>
+          <span
+            class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-600"
+            x-text="`${liveMetrics.issueCount}`"
+          ></span>
+        </div>
+        <div x-show="backendIssues.length === 0" class="mt-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          No current issues.
+        </div>
+        <ul x-show="backendIssues.length > 0" class="issue-list mt-3 max-h-40 overflow-auto pr-1">
+          <template x-for="issue in backendIssues" :key="issue.message || issue">
+            <li class="rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700" x-text="issue.message || issue"></li>
+          </template>
+        </ul>
+      </section>
+
+      <section class="mt-5 border-t border-blue-100 pt-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-black text-slate-900">Bay list</h2>
+          <span class="text-xs font-bold text-slate-500" x-text="`${resultBays.length} placed`"></span>
+        </div>
         <div class="mt-3 max-h-52 space-y-2 overflow-auto pr-1">
           <template x-for="bay in resultBays" :key="bay.uid">
-            <button @click="selectBay(bay)" class="shelf-row w-full rounded-2xl p-2 text-left transition" :class="selectedBayUid === bay.uid ? 'is-selected' : ''">
+            <button
+              @click="selectBay(bay)"
+              class="shelf-row w-full rounded-2xl p-3 text-left transition"
+              :class="[
+                selectedBayUid === bay.uid ? 'is-selected' : '',
+                bay.isInvalid ? 'is-invalid' : ''
+              ]"
+            >
               <div class="flex items-center justify-between gap-2">
-                <b class="truncate" x-text="bay.id"></b>
+                <b class="truncate" x-text="bay.label || bay.id"></b>
                 <span class="text-xs text-slate-400" x-text="`${bay.rotation || 0} deg`"></span>
               </div>
-              <p class="truncate text-xs text-slate-500">x:<span x-text="bay.x"></span> y:<span x-text="bay.y"></span></p>
+              <p class="truncate text-xs text-slate-500">
+                x:<span x-text="bay.x"></span> y:<span x-text="bay.y"></span>
+                - gap <span x-text="bay.gap || 0"></span>
+              </p>
             </button>
           </template>
         </div>
-      </div>
+      </section>
     </aside>
 
-    <section class="min-w-0 rounded-3xl border border-blue-100 bg-white/80 p-4 shadow-xl shadow-blue-900/5 backdrop-blur">
+    <section
+      class="min-w-0 rounded-3xl border border-blue-100 bg-white/80 p-4 shadow-xl shadow-blue-900/5 backdrop-blur"
+    >
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-black text-slate-900">Solved layout canvas</h2>
+          <p class="layout-caption text-sm text-slate-500">
+            Drag bays to move them. The striped front gap may overlap only
+            another gap and does not count toward covered area.
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600" x-text="`${resultBays.length} bays`"></span>
+          <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700" x-text="`${coveragePercent}% covered`"></span>
+        </div>
+      </div>
+
       <div
         x-ref="finalCanvas"
         @mousemove="dragBay"
@@ -133,14 +440,33 @@
         style="height:calc(100vh - 152px); min-height:620px;"
       >
         <div class="final-canvas-layer" :style="canvasLayerStyle()">
-          <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 650" preserveAspectRatio="none">
+          <svg
+            class="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 1000 650"
+            preserveAspectRatio="none"
+          >
             <defs>
-              <pattern id="layoutGrid" width="25" height="25" patternUnits="userSpaceOnUse">
-                <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#b9dcf2" stroke-width="1"/>
+              <pattern
+                id="layoutGrid"
+                width="25"
+                height="25"
+                patternUnits="userSpaceOnUse"
+              >
+                <path
+                  d="M 25 0 L 0 0 0 25"
+                  fill="none"
+                  stroke="#b9dcf2"
+                  stroke-width="1"
+                />
               </pattern>
             </defs>
             <rect width="1000" height="650" fill="url(#layoutGrid)"></rect>
-            <polygon :points="warehousePolygonPoints()" fill="rgba(241, 248, 253, .72)" stroke="rgba(76, 145, 198, .9)" stroke-width="3"></polygon>
+            <polygon
+              :points="warehousePolygonPoints()"
+              fill="rgba(241, 248, 253, .72)"
+              stroke="rgba(76, 145, 198, .9)"
+              stroke-width="3"
+            ></polygon>
           </svg>
 
           <template x-for="obs in obstacles" :key="obs.id">
@@ -153,11 +479,13 @@
             <button
               @mousedown.prevent="handleBayPointerDown($event, bay)"
               class="shelf-placement result-bay absolute overflow-hidden rounded-xl border text-left shadow-lg"
-              :class="selectedBayUid === bay.uid ? 'is-selected' : 'is-default'"
+              :class="[
+                selectedBayUid === bay.uid ? 'is-selected' : 'is-default',
+                bay.isInvalid ? 'is-invalid' : ''
+              ]"
               :style="bayStyle(bay)"
-              :title="`Furniture ${bay.id}`"
+              :title="`${bay.label || bay.id}`"
             >
-              <span x-show="bayGap(bay) > 0" class="shelf-gap-zone" :title="`${bayGap(bay)} mm gap`"></span>
               <span class="shelf-rack-body relative block">
                 <span class="rack-depth-line rack-depth-left"></span>
                 <span class="rack-depth-line rack-depth-right"></span>
@@ -167,14 +495,26 @@
                 <span class="rack-post rack-post-top-right"></span>
                 <span class="rack-post rack-post-bottom-left"></span>
                 <span class="rack-post rack-post-bottom-right"></span>
-                <span class="rack-label" x-text="bay.id"></span>
+                <span class="rack-label" x-text="bay.label || bay.id"></span>
                 <span class="rack-rotation" x-text="`${bay.rotation || 0} deg`"></span>
+              </span>
+              <span
+                x-show="Number(bay.gap || 0) > 0"
+                class="shelf-gap-zone"
+                :title="`${bay.gap} mm front gap`"
+              >
+                <span class="shelf-gap-label">gap</span>
               </span>
             </button>
           </template>
         </div>
 
-        <div x-show="!result" class="absolute inset-0 flex items-center justify-center text-slate-500">Run optimization to show the final layout.</div>
+        <div
+          x-show="resultBays.length === 0 && !running"
+          class="absolute inset-0 flex items-center justify-center text-slate-500"
+        >
+          Run optimization to show the final layout.
+        </div>
       </div>
     </section>
   </div>
@@ -182,5 +522,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/job.js', v='layout-5') }}"></script>
+<script src="{{ url_for('static', filename='js/job_runtime.js', v='layout-real-2') }}"></script>
+<script src="{{ url_for('static', filename='js/job.js', v='layout-real-2') }}"></script>
 {% endblock %}

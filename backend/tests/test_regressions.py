@@ -108,12 +108,27 @@ class GeometryRegressionTests(unittest.TestCase):
 
 
 class SolverContractTests(unittest.TestCase):
-    def test_fixed_step_angle_mode_includes_non_cardinal_angles(self) -> None:
+    def test_fixed_step_angle_mode_uses_full_30_degree_lattice(self) -> None:
         case = make_case([(0, 0), (20, 0), (20, 20), (0, 20)])
         solver = HybridSolver(angle_mode="fixed-step", angle_step=30.0, time_budget=1.0)
-        ctx = build_case_context(case)
-        angles = solver._select_search_angles(case, ctx, solver._ranked_types(case), 999999.0)
-        self.assertEqual(angles, [0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0])
+        angles = solver._select_search_angles()
+        self.assertEqual(
+            angles,
+            [
+                0.0,
+                30.0,
+                60.0,
+                90.0,
+                120.0,
+                150.0,
+                180.0,
+                210.0,
+                240.0,
+                270.0,
+                300.0,
+                330.0,
+            ],
+        )
 
 
 if __name__ == "__main__":
