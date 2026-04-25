@@ -1,221 +1,73 @@
 {% extends "base.html" %}
-{% block title %}Mecalux Smart Optimizer · Home{% endblock %}
+{% block title %}Mecalux Smart Optimizer{% endblock %}
 
 {% block content %}
-<section id="challenge" class="hero-section overflow-hidden bg-white">
-  <div class="mx-auto grid max-w-7xl items-center gap-10 px-5 py-16 md:px-8 md:py-24 lg:grid-cols-[1fr_.95fr]">
-    <div class="hero-copy">
-      <span class="eyebrow reveal-up">Warehouse Layout Challenge</span>
-      <h1 class="reveal-up mt-5 font-display text-5xl font-black leading-[0.98] tracking-tight text-slate-950 md:text-7xl">
-        Smart warehouse optimization for <span class="text-[#F58220]">real constraints</span>
-      </h1>
-      <p class="reveal-up mt-6 max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
-        Upload a warehouse case, visualize obstacles and ceiling limits, then generate optimized bay placements with live metrics and validation.
-      </p>
-      <div class="reveal-up mt-8 flex flex-wrap gap-4">
-        <a href="#projects" class="cta-primary inline-flex items-center gap-2 rounded-full bg-[#F58220] px-6 py-4 font-extrabold text-white shadow-xl shadow-orange-500/20 hover:-translate-y-1 hover:bg-[#e87310]">
-          Start optimizing
-          <span aria-hidden="true">→</span>
-        </a>
-        <a href="#workflow" class="cta-secondary inline-flex items-center gap-2 rounded-full border-2 border-[#0066B3] bg-white px-6 py-4 font-extrabold text-[#0066B3] hover:-translate-y-1 hover:bg-blue-50">
-          See workflow
-        </a>
-      </div>
-      <div class="reveal-up mt-8 flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-500">
-        <span class="rounded-full bg-slate-100 px-4 py-2">CSV input-ready</span>
-        <span class="rounded-full bg-slate-100 px-4 py-2">Mock-first Flask UI</span>
-        <span class="rounded-full bg-slate-100 px-4 py-2">Backend friendly</span>
-      </div>
-    </div>
+<section class="home-screen flex min-h-screen items-center justify-center overflow-hidden px-5 py-6">
+  <form id="homeUploadForm" method="post" action="{{ url_for('upload_case') }}" enctype="multipart/form-data" class="home-panel grid w-full max-w-5xl gap-6 rounded-[28px] border border-blue-100/80 bg-white/88 p-6 shadow-2xl shadow-blue-900/8 backdrop-blur md:grid-cols-[minmax(0,1fr)_220px] md:p-8">
+    <input type="hidden" name="next" value="jobs" />
 
-    <div class="hero-visual reveal-scale relative">
-      <div class="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[#F58220]/20 blur-3xl"></div>
-      <div class="absolute -bottom-12 -left-10 h-44 w-44 rounded-full bg-[#0066B3]/20 blur-3xl"></div>
-
-      <div class="warehouse-preview relative rounded-[2rem] border border-slate-200 bg-[#f3f4f6] p-5 shadow-2xl shadow-slate-900/10">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <p class="text-xs font-black uppercase tracking-[0.22em] text-[#0066B3]">Live layout preview</p>
-            <h2 class="font-display text-2xl font-bold text-slate-950">Case0 simulation</h2>
-          </div>
-          <span class="status-chip rounded-full bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">Validated ✓</span>
-        </div>
-
-        <div class="preview-canvas relative overflow-hidden rounded-[1.35rem] border border-slate-300 bg-white">
-          <svg class="h-full w-full" viewBox="0 0 640 430" role="img" aria-label="Animated warehouse preview">
-            <defs>
-              <pattern id="smallGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-                <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#dbe7f3" stroke-width="1"/>
-              </pattern>
-              <pattern id="diagonalHatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <line x1="0" y1="0" x2="0" y2="10" stroke="#ef4444" stroke-width="3" opacity=".45"/>
-              </pattern>
-            </defs>
-            <rect width="640" height="430" fill="url(#smallGrid)"/>
-            <path d="M70 60 H560 V180 H260 V360 H70 Z" fill="#eef6ff" stroke="#0066B3" stroke-width="5" stroke-linejoin="round"/>
-            <rect x="105" y="95" width="58" height="58" rx="6" fill="url(#diagonalHatch)" stroke="#991b1b" stroke-width="2"/>
-            <rect x="425" y="145" width="100" height="26" rx="5" fill="url(#diagonalHatch)" stroke="#991b1b" stroke-width="2"/>
-            <rect x="125" y="205" width="22" height="112" rx="5" fill="url(#diagonalHatch)" stroke="#991b1b" stroke-width="2"/>
-
-            <g class="bay-row-one">
-              <rect x="85" y="70" width="74" height="48" rx="7" fill="#F58220" opacity=".88"/>
-              <rect x="168" y="70" width="74" height="48" rx="7" fill="#38BDF8" opacity=".82"/>
-              <rect x="251" y="70" width="74" height="48" rx="7" fill="#F58220" opacity=".88"/>
-              <rect x="334" y="70" width="74" height="48" rx="7" fill="#22C55E" opacity=".78"/>
-            </g>
-            <g class="bay-row-two">
-              <rect x="279" y="128" width="66" height="42" rx="7" fill="#F58220" opacity=".9"/>
-              <rect x="353" y="128" width="66" height="42" rx="7" fill="#38BDF8" opacity=".82"/>
-              <rect x="86" y="168" width="34" height="74" rx="7" fill="#22C55E" opacity=".78"/>
-              <rect x="160" y="168" width="34" height="74" rx="7" fill="#F58220" opacity=".9"/>
-            </g>
-            <path class="skyline-path" d="M70 122 H250 V178 H560" fill="none" stroke="#F58220" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 10"/>
-          </svg>
-
-          <div class="floating-score absolute right-4 top-4 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-xl backdrop-blur">
-            <p class="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Q Score</p>
-            <p class="font-display text-3xl font-black text-[#F58220]">128.42</p>
-            <p class="text-xs font-bold text-emerald-600">↓ minimized</p>
-          </div>
+    <div class="min-w-0">
+      <div class="flex items-center gap-3">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-xl font-black text-[#4C91C6]">M</div>
+        <div>
+          <h1 class="font-display text-2xl font-black tracking-tight text-slate-950 md:text-4xl">Mecalux Smart Optimizer</h1>
+          <p class="mt-1 text-sm font-semibold text-slate-500">Add case files before entering the final layout workspace.</p>
         </div>
       </div>
-    </div>
-  </div>
-</section>
 
-<section id="workflow" class="bg-[#f4f6f8] px-5 py-16 md:px-8">
-  <div class="mx-auto max-w-7xl">
-    <div class="mb-10 max-w-3xl">
-      <span class="eyebrow reveal-up">Workflow</span>
-      <h2 class="reveal-up mt-4 font-display text-4xl font-black tracking-tight text-slate-950 md:text-5xl">From challenge files to a validated layout</h2>
-      <p class="reveal-up mt-4 text-lg leading-8 text-slate-600">A clean Mecalux-style flow, powered by a hackathon-ready optimization cockpit underneath.</p>
-    </div>
-
-    <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-      <article class="feature-card reveal-up rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5">
-        <div class="line-icon mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[#0066B3] text-[#0066B3]">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6h14l8 8v28H15z"/><path d="M29 6v9h8"/><path d="M23 34V20"/><path d="M17 26l6-6 6 6"/></svg>
+      <div class="mt-7 rounded-3xl border border-blue-100 bg-[#f7fbff] p-5">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-display text-xl font-bold text-slate-950">Add case files</h2>
+          <span class="rounded-full bg-orange-100 px-3 py-1 text-xs font-black uppercase tracking-[.14em] text-orange-700">Required</span>
         </div>
-        <h3 class="font-display text-2xl font-bold text-[#F58220]">Load cases</h3>
-        <p class="mt-3 leading-7 text-slate-600">Upload public challenge CSVs or start from a mock project already shaped for the backend.</p>
-      </article>
 
-      <article class="feature-card reveal-up rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5">
-        <div class="line-icon mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[#0066B3] text-[#0066B3]">
-          <svg width="50" height="50" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10h34v28H7z"/><path d="M7 19h34"/><path d="M16 10v28"/><path d="M29 19v19"/><path d="M16 29h25"/></svg>
-        </div>
-        <h3 class="font-display text-2xl font-bold text-[#F58220]">Analyze constraints</h3>
-        <p class="mt-3 leading-7 text-slate-600">Display warehouse shape, obstacles, grid occupancy and ceiling restrictions visually.</p>
-      </article>
+        <div class="mt-5 grid gap-4">
+          <label class="file-field">
+            <span>Case bundle .zip</span>
+            <input type="file" name="case_zip" accept=".zip" />
+          </label>
 
-      <article class="feature-card reveal-up rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5">
-        <div class="line-icon mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[#0066B3] text-[#0066B3]">
-          <svg width="50" height="50" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 38h32"/><path d="M10 34V18l14-8 14 8v16"/><path d="M16 34V21h16v13"/><path d="M20 25h8"/><path d="M20 30h8"/></svg>
-        </div>
-        <h3 class="font-display text-2xl font-bold text-[#F58220]">Optimize layout</h3>
-        <p class="mt-3 leading-7 text-slate-600">Place bay candidates, compare score changes and prepare the interactive cockpit view.</p>
-      </article>
+          <label class="file-field">
+            <span>JSON layout</span>
+            <input type="file" name="case_json" accept=".json" />
+          </label>
 
-      <article class="feature-card reveal-up rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5">
-        <div class="line-icon mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[#0066B3] text-[#0066B3]">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 25l9 9L39 13"/><path d="M39 30v9H9V9h22"/></svg>
-        </div>
-        <h3 class="font-display text-2xl font-bold text-[#F58220]">Validate & export</h3>
-        <p class="mt-3 leading-7 text-slate-600">Check collisions, constraints and final output before sending the solution forward.</p>
-      </article>
-    </div>
-  </div>
-</section>
-
-<section id="projects" class="bg-white px-5 py-16 md:px-8">
-  <div class="mx-auto max-w-7xl">
-    <div class="grid gap-8 lg:grid-cols-[.9fr_1.1fr]">
-      <div>
-        <span class="eyebrow reveal-up">Start area</span>
-        <h2 class="reveal-up mt-4 font-display text-4xl font-black tracking-tight text-slate-950 md:text-5xl">Open a case or create a new one</h2>
-        <p class="reveal-up mt-4 text-lg leading-8 text-slate-600">This section keeps the previous Flask functionality, but now it follows the homepage aesthetic. Next we’ll replace the project cards with the darker optimizer cockpit.</p>
-
-        <form method="post" action="{{ url_for('new_project') }}" class="reveal-up mt-8 rounded-[1.75rem] border border-slate-200 bg-[#f4f6f8] p-6 shadow-xl shadow-slate-900/5">
-          <h3 class="font-display text-2xl font-bold text-slate-950">Create new project</h3>
-          <p class="mt-2 text-sm text-slate-500">Creates a local in-memory mock project.</p>
-          <label class="mt-5 block text-sm font-bold text-slate-700">Project name</label>
-          <input name="name" placeholder="e.g. Warehouse Barcelona" class="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition focus:border-[#0066B3] focus:ring-4 focus:ring-blue-100" />
-          <button class="mt-5 w-full rounded-full bg-[#F58220] px-5 py-3.5 font-extrabold text-white shadow-lg shadow-orange-500/20 hover:-translate-y-0.5 hover:bg-[#e87310]">Create project</button>
-        </form>
-      </div>
-
-      <div class="reveal-up rounded-[2rem] border border-slate-200 bg-[#f4f6f8] p-5 shadow-xl shadow-slate-900/5">
-        <div class="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <h3 class="font-display text-2xl font-bold text-slate-950">Projects</h3>
-            <p class="text-sm text-slate-500">Choose a project to edit or run optimization.</p>
-          </div>
-          <a href="#upload-cases" class="rounded-full border border-[#0066B3] bg-white px-4 py-2 text-sm font-extrabold text-[#0066B3] hover:bg-blue-50">Upload</a>
-        </div>
-        <div class="grid gap-4">
-          {% for project in projects %}
-          <article class="project-card rounded-[1.4rem] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <h4 class="font-display text-xl font-bold text-slate-950">{{ project.name }}</h4>
-                <p class="mt-1 text-sm text-slate-500">Created: {{ project.created_at }}</p>
-              </div>
-              <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-[#0066B3]">{{ project.status }}</span>
+          <div class="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+            <input name="case_name" placeholder="CSV case name" class="rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#4C91C6] focus:ring-4 focus:ring-blue-100" />
+            <div class="grid grid-cols-2 gap-2">
+              <label class="file-field compact"><span>warehouse.csv</span><input type="file" name="warehouse_csv" accept=".csv" /></label>
+              <label class="file-field compact"><span>obstacles.csv</span><input type="file" name="obstacles_csv" accept=".csv" /></label>
+              <label class="file-field compact"><span>ceiling.csv</span><input type="file" name="ceiling_csv" accept=".csv" /></label>
+              <label class="file-field compact"><span>types_of_bays.csv</span><input type="file" name="types_of_bays_csv" accept=".csv" /></label>
             </div>
-            <div class="mt-5 grid grid-cols-3 gap-3">
-              <a href="{{ url_for('editor', project_id=project.id) }}" class="rounded-full bg-slate-100 px-4 py-3 text-center text-sm font-extrabold text-slate-700 hover:bg-slate-200">Editor</a>
-              <a href="{{ url_for('optimization_page', project_id=project.id) }}" class="rounded-full bg-[#0066B3] px-4 py-3 text-center text-sm font-extrabold text-white hover:bg-[#005399]">Optimize</a>
-              <form method="post" action="{{ url_for('delete_project', project_id=project.id) }}" onsubmit="return confirm({{ ('Delete ' ~ project.name ~ '? This cannot be undone.')|tojson }});">
-                <button class="w-full rounded-full bg-red-50 px-4 py-3 text-center text-sm font-extrabold text-red-600 hover:bg-red-100">Delete</button>
-              </form>
-            </div>
-          </article>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="upload-cases" class="bg-[#f4f6f8] px-5 py-16 md:px-8">
-  <div class="mx-auto max-w-7xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5 md:p-8">
-    <div class="grid gap-8 lg:grid-cols-[.85fr_1.15fr]">
-      <div>
-        <span class="eyebrow">Challenge input</span>
-        <h2 class="mt-4 font-display text-4xl font-black tracking-tight text-slate-950">Upload public cases</h2>
-        <p class="mt-4 leading-8 text-slate-600">
-          Accepts the public-test format: <code>warehouse.csv</code>, <code>obstacles.csv</code>, <code>ceiling.csv</code>, and <code>types_of_bays.csv</code>. Upload a full zip or individual CSV files.
-        </p>
-        <p class="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-[#0066B3]">
-          Still mock/in-memory: no database conflict with the backend later.
-        </p>
-      </div>
-
-      <form method="post" action="{{ url_for('upload_case') }}" enctype="multipart/form-data" class="grid gap-4">
-        <label class="upload-card block rounded-3xl border border-slate-200 bg-[#f4f6f8] p-5">
-          <span class="block font-display text-lg font-bold text-slate-950">Option A · Upload PublicTestCases.zip</span>
-          <input type="file" name="case_zip" accept=".zip" class="mt-3 w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-[#F58220] file:px-4 file:py-2 file:font-bold file:text-white hover:file:bg-[#e87310]" />
-        </label>
-
-        <div class="upload-card rounded-3xl border border-slate-200 bg-[#f4f6f8] p-5">
-          <span class="block font-display text-lg font-bold text-slate-950">Option B · Upload individual CSV files</span>
-          <input name="case_name" placeholder="Case name, e.g. Case 0" class="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-[#0066B3]" />
-          <div class="mt-3 grid gap-3 sm:grid-cols-2">
-            <label class="text-xs font-bold text-slate-500">warehouse.csv<input type="file" name="warehouse_csv" accept=".csv" class="mt-1 w-full text-xs" /></label>
-            <label class="text-xs font-bold text-slate-500">obstacles.csv<input type="file" name="obstacles_csv" accept=".csv" class="mt-1 w-full text-xs" /></label>
-            <label class="text-xs font-bold text-slate-500">ceiling.csv<input type="file" name="ceiling_csv" accept=".csv" class="mt-1 w-full text-xs" /></label>
-            <label class="text-xs font-bold text-slate-500">types_of_bays.csv<input type="file" name="types_of_bays_csv" accept=".csv" class="mt-1 w-full text-xs" /></label>
           </div>
         </div>
 
-        <label class="upload-card block rounded-3xl border border-slate-200 bg-[#f4f6f8] p-5">
-          <span class="block font-display text-lg font-bold text-slate-950">Option C · Upload JSON layout</span>
-          <input type="file" name="case_json" accept=".json" class="mt-3 w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-slate-700 file:px-4 file:py-2 file:font-bold file:text-white hover:file:bg-slate-600" />
-        </label>
-
-        <button class="rounded-full bg-[#0066B3] px-5 py-3.5 font-extrabold text-white shadow-lg shadow-blue-500/20 hover:-translate-y-0.5 hover:bg-[#005399]">Import case into editor</button>
-      </form>
+        <p id="homeUploadError" class="mt-4 hidden rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-700">Upload a ZIP, JSON, or at least warehouse.csv before entering.</p>
+      </div>
     </div>
-  </div>
+
+    <div class="flex items-center justify-center md:border-l md:border-blue-100 md:pl-6">
+      <button type="submit" class="enter-button rounded-full bg-[#F4A261] px-7 py-3 text-sm font-black uppercase tracking-[.14em] text-white shadow-lg shadow-orange-300/30 hover:-translate-y-0.5 hover:bg-[#ef9550]">
+        Enter
+      </button>
+    </div>
+  </form>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById("homeUploadForm")?.addEventListener("submit", (event) => {
+    const form = event.currentTarget;
+    const hasFile = Array.from(form.querySelectorAll('input[type="file"]')).some((input) => input.files && input.files.length > 0);
+    const error = document.getElementById("homeUploadError");
+    if (!hasFile) {
+      event.preventDefault();
+      error?.classList.remove("hidden");
+    } else {
+      error?.classList.add("hidden");
+    }
+  });
+</script>
 {% endblock %}

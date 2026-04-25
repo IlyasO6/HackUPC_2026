@@ -71,6 +71,9 @@ def upload_case():
         created.append(api_client.import_project(parsed_name, layout, status="uploaded csv"))
 
     if created:
+        destination = request.form.get("next")
+        if destination == "jobs":
+            return redirect(url_for("optimization_page", project_id=created[0]["id"]))
         return redirect(url_for("editor", project_id=created[0]["id"]))
 
     return redirect(url_for("dashboard"))

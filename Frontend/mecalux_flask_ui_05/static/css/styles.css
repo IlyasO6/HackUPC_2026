@@ -32,6 +32,84 @@ body {
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.home-screen {
+  background:
+    linear-gradient(135deg, rgba(144, 196, 232, 0.20), transparent 38%),
+    linear-gradient(315deg, rgba(244, 162, 97, 0.18), transparent 36%),
+    #f7fbff;
+}
+
+.home-panel,
+.home-action {
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.file-input {
+  width: 100%;
+  color: #475569;
+  font-size: 0.82rem;
+}
+
+.file-input::file-selector-button {
+  background: #0066b3;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  margin-right: 10px;
+  padding: 8px 12px;
+}
+
+.file-input.compact {
+  font-size: 0.7rem;
+}
+
+.file-field {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 150px minmax(0, 1fr);
+  padding: 10px 12px;
+}
+
+.file-field span {
+  color: #4c91c6;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.file-field input {
+  color: #64748b;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.file-field input::file-selector-button {
+  background: #dbeafe;
+  border: 0;
+  border-radius: 999px;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  margin-right: 10px;
+  padding: 7px 10px;
+}
+
+.file-field.compact {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  padding: 9px;
+}
+
+.enter-button {
+  min-width: 118px;
+}
+
 .font-display {
   font-family: "Space Grotesk", "Inter", sans-serif;
 }
@@ -311,38 +389,45 @@ input {
 }
 
 .shelf-row {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(186, 214, 235, 0.9);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .shelf-row:hover {
-  background: rgba(15, 23, 42, 0.96);
-  border-color: rgba(125, 211, 252, 0.22);
+  background: rgba(240, 248, 255, 0.96);
+  border-color: rgba(76, 145, 198, 0.42);
 }
 
 .shelf-row.is-selected {
-  border-color: rgba(56, 189, 248, 0.62);
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(245, 130, 32, 0.08));
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.12);
+  border-color: rgba(244, 162, 97, 0.8);
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.92), rgba(255, 237, 213, 0.74));
+  box-shadow: 0 0 0 2px rgba(244, 162, 97, 0.12);
 }
 
 .shelf-placement {
-  background: rgba(15, 23, 42, 0.34);
+  background: rgba(219, 234, 254, 0.44);
   display: flex;
   flex-direction: column;
 }
 
 .shelf-placement.is-default {
-  border-color: rgba(147, 197, 253, 0.55);
+  border-color: rgba(127, 179, 213, 0.78);
 }
 
 .shelf-placement.is-selected {
-  border-color: rgba(250, 204, 21, 0.9);
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.22), 0 16px 35px rgba(15, 23, 42, 0.28);
+  border-color: rgba(244, 162, 97, 0.95);
+  box-shadow: 0 0 0 4px rgba(244, 162, 97, 0.18), 0 16px 35px rgba(76, 145, 198, 0.16);
 }
 
 .result-bay {
-  border-color: rgba(110, 231, 183, 0.58);
+  border-color: rgba(76, 145, 198, 0.72);
+  backface-visibility: hidden;
+  contain: layout paint style;
+  will-change: transform;
+}
+
+.result-bay.is-selected {
+  border-color: rgba(250, 204, 21, 0.94);
 }
 
 .shelf-gap-zone {
@@ -350,13 +435,13 @@ input {
   background:
     repeating-linear-gradient(
       45deg,
-      rgba(245, 130, 32, 0.18) 0,
-      rgba(245, 130, 32, 0.18) 6px,
-      rgba(251, 191, 36, 0.05) 6px,
-      rgba(251, 191, 36, 0.05) 12px
+      rgba(244, 162, 97, 0.22) 0,
+      rgba(244, 162, 97, 0.22) 6px,
+      rgba(255, 237, 213, 0.3) 6px,
+      rgba(255, 237, 213, 0.3) 12px
     );
-  border-bottom: 1px dashed rgba(251, 191, 36, 0.78);
-  color: #fbbf24;
+  border-bottom: 1px dashed rgba(244, 162, 97, 0.76);
+  color: #c76b2d;
   display: flex;
   flex: 0 0 var(--gap-depth);
   justify-content: center;
@@ -374,14 +459,14 @@ input {
 }
 
 .shelf-rack-body {
-  background: rgba(15, 23, 42, 0.22);
+  background: rgba(191, 219, 254, 0.52);
   flex: 0 0 var(--rack-depth);
   min-height: 0;
   pointer-events: none;
 }
 
 .rack-rail {
-  background: rgba(245, 130, 32, 0.92);
+  background: rgba(244, 162, 97, 0.92);
   border-radius: 999px;
   height: max(4px, min(26%, 12px));
   left: max(7px, 8%);
@@ -399,7 +484,7 @@ input {
 }
 
 .rack-depth-line {
-  background: rgba(203, 213, 225, 0.9);
+  background: rgba(76, 145, 198, 0.52);
   border-radius: 999px;
   bottom: 25%;
   position: absolute;
@@ -417,7 +502,7 @@ input {
 }
 
 .rack-post {
-  background: #4472c4;
+  background: #4c91c6;
   border-radius: min(4px, 14%);
   height: max(8px, min(28%, 18px));
   position: absolute;
@@ -451,7 +536,8 @@ input {
   left: 8px;
   line-height: 1;
   position: absolute;
-  text-shadow: 0 1px 8px rgba(15, 23, 42, 0.5);
+  color: #1f4f75;
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.7);
   top: 8px;
   z-index: 4;
 }
@@ -513,4 +599,69 @@ input {
   color: #fff;
   transform: translateY(-1px) scale(1.03);
   box-shadow: 0 12px 26px rgba(127, 29, 29, 0.32);
+}
+
+.layout-workbench {
+  align-items: start;
+}
+
+.final-layout-shell {
+  align-items: start;
+}
+
+.layout-tools {
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+}
+
+@media (min-width: 1280px) {
+  .final-layout-shell {
+    grid-template-columns: minmax(260px, 25%) minmax(0, 75%);
+  }
+}
+
+.tool-chip {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(186, 214, 235, 0.95);
+  border-radius: 12px;
+  color: #47657c;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+.tool-chip:hover {
+  background: #f0f8ff;
+  border-color: rgba(76, 145, 198, 0.45);
+  color: #1f4f75;
+}
+
+.tool-chip.is-active {
+  background: rgba(219, 234, 254, 0.96);
+  border-color: rgba(76, 145, 198, 0.78);
+  color: #1f4f75;
+  box-shadow: 0 0 0 2px rgba(76, 145, 198, 0.12);
+}
+
+.tool-chip.danger.is-active {
+  background: rgba(255, 237, 213, 0.98);
+  border-color: rgba(244, 162, 97, 0.82);
+  color: #9a4b1f;
+}
+
+.final-canvas-layer {
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: top left;
+}
+
+.layout-obstacle {
+  background: rgba(34, 47, 62, 0.92);
+  border-color: rgba(15, 23, 42, 0.32);
+  color: #e2e8f0;
 }
