@@ -8,6 +8,14 @@ This module is designed to be FAST — called on every interactive edit
 from the frontend for real-time scoring feedback.
 """
 
+import sys
+import os
+
+# Ensure backend is on sys.path (same as bridge.py does)
+_backend_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend"))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from bridge import dicts_to_case_data, dicts_to_solution
 
 from scoring.scorer import compute_score as backend_compute_score
