@@ -64,8 +64,6 @@ class SolveResult(BaseModel):
     """Result from the optimizer."""
     placed_bays: List[PlacedBay]
     Q: float
-    B: float
-    E: float
     coverage: float
     solved_in_ms: int
 

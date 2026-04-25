@@ -19,13 +19,14 @@ import sys
 import os
 import asyncio
 import json
+import time
 from typing import List
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from models import (
+from api_models import (
     Job, JobStatus, SolveResult, PlacedBay,
     JobCreatedResponse, HealthResponse, OptimizationInput
 )
@@ -33,11 +34,14 @@ from job_store import create_job, get_job, update_job, get_progress_queue, clean
 from csv_parser import parse_all
 from scorer import calculate_score, validate_placement
 
-# Add project root to path so we can import the optimizer package
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Bridge handles backend path setup and model conversion
+from bridge import to_case_data, solution_to_api
 
 # Testcases directory (relative to project root)
 TESTCASES_DIR = os.path.join(os.path.dirname(__file__), "..", "testcases")
+
+# Default solver time budget (seconds)
+SOLVER_TIME_BUDGET = 29.0
 
 
 router = APIRouter(prefix="/api/v1")
@@ -219,50 +223,68 @@ async def stream_job(job_id: str):
 
 async def _run_optimizer(job_id: str, input_data: OptimizationInput):
     """
-    Run the optimizer in a background thread and stream progress via queue.
-    Uses asyncio.to_thread() to avoid blocking the event loop.
+    Run the real HybridSolver in a background thread and stream progress.
+
+    Uses timer-based progress updates since the solver doesn't support
+    callbacks. We know the time_budget, so we can estimate progress.
     """
     queue = get_progress_queue(job_id)
     await queue.put({"event": "job_started", "job_id": job_id})
     update_job(job_id, status=JobStatus.RUNNING, progress=0)
 
-    # Prepare data as dicts for the optimizer
-    warehouse = [{"x": p.x, "y": p.y} for p in input_data.warehouse]
-    obstacles = [{"x": o.x, "y": o.y, "width": o.width, "depth": o.depth} for o in input_data.obstacles]
-    ceiling = [{"x": c.x, "height": c.height} for c in input_data.ceiling]
-    bay_types = [bt.model_dump() for bt in input_data.bay_types]
+    # Convert API models → backend CaseData
+    case = to_case_data(input_data)
 
-    # Progress callback — called from the optimizer thread
+    # Event loop reference for timer-based progress
     loop = asyncio.get_running_loop()
 
-    def on_progress(percent: int, message: str = ""):
-        update_job(job_id, progress=percent, message=message)
-        asyncio.run_coroutine_threadsafe(
-            queue.put({
+    # Timer-based progress emitter
+    progress_task = None
+    cancel_progress = asyncio.Event()
+
+    async def emit_progress():
+        """Emit smooth progress updates based on time budget."""
+        start = time.monotonic()
+        while not cancel_progress.is_set():
+            elapsed = time.monotonic() - start
+            # Progress follows a logarithmic curve: fast at start, slows down
+            # Cap at 95% — the final 100% comes from the actual completion
+            pct = min(95, int((elapsed / SOLVER_TIME_BUDGET) * 100))
+            update_job(job_id, progress=pct, message=f"Solving... ({pct}%)")
+            await queue.put({
                 "event": "job_progress",
                 "job_id": job_id,
-                "percent": percent,
-                "message": message,
-            }),
-            loop,
-        )
+                "percent": pct,
+                "message": f"Solving... ({pct}%)",
+            })
+            try:
+                await asyncio.wait_for(cancel_progress.wait(), timeout=1.0)
+                break
+            except asyncio.TimeoutError:
+                pass
 
     try:
-        # Import optimizer and run in thread (so it doesn't block async)
-        from optimizer.solver import solve
-        result_raw = await asyncio.to_thread(
-            solve, warehouse, obstacles, ceiling, bay_types, on_progress
-        )
+        # Start progress emitter
+        progress_task = asyncio.create_task(emit_progress())
 
-        # Parse result
-        result = SolveResult(
-            placed_bays=[PlacedBay(**b) for b in result_raw["placed_bays"]],
-            Q=result_raw["Q"],
-            B=result_raw["B"],
-            E=result_raw["E"],
-            coverage=result_raw["coverage"],
-            solved_in_ms=result_raw["solved_in_ms"],
-        )
+        # Import and run the real solver in a thread
+        from solver.hybrid import HybridSolver
+
+        def run_solver():
+            solver = HybridSolver(time_budget=SOLVER_TIME_BUDGET)
+            return solver.solve(case)
+
+        start_time = time.monotonic()
+        solution = await asyncio.to_thread(run_solver)
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+        # Stop progress emitter
+        cancel_progress.set()
+        if progress_task:
+            await progress_task
+
+        # Convert result
+        result = solution_to_api(solution, case, elapsed_ms)
 
         update_job(job_id, status=JobStatus.COMPLETED, progress=100, result=result)
         await queue.put({
@@ -272,6 +294,11 @@ async def _run_optimizer(job_id: str, input_data: OptimizationInput):
         })
 
     except Exception as e:
+        # Stop progress emitter on error
+        cancel_progress.set()
+        if progress_task:
+            await progress_task
+
         error_msg = str(e)[:500]
         update_job(job_id, status=JobStatus.FAILED, error=error_msg)
         await queue.put({
@@ -388,4 +415,3 @@ async def load_testcase(name: str):
         raise HTTPException(status_code=400, detail=f"CSV parsing error: {str(e)}")
 
     return input_data
-

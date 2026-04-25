@@ -7,7 +7,7 @@ All jobs live in the same process as FastAPI (via BackgroundTasks).
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
-from models import Job
+from api_models import Job
 
 
 # ─── In-memory storage ────────────────────────────────────────────────────────
