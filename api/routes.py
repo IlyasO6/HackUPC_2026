@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -414,6 +415,15 @@ async def _require_session(session_id: str) -> StatefulLayoutSession:
     return session
 
 
+@router.get("/session/{session_id}/case")
+async def get_session_case(session_id: str) -> dict:
+    """Fetch the original case data of an interactive layout session."""
+    session = await _require_session(session_id)
+    case = session.case
+    # CaseData is a stdlib dataclass, not Pydantic, so convert manually
+    return _case_data_to_dict(case)
+
+
 async def _solve_case(case) -> tuple[object, object, int]:
     """Solve a case in the executor and return solution, stats, and time."""
 
@@ -499,6 +509,13 @@ async def _run_optimizer(job_id: str, input_data: OptimizationInput) -> None:
         cancel_progress.set()
         await progress_task
         _log_optimization(stats, elapsed_ms)
+        
+        # Save session so editor can pick it up
+        from layout_session import StatefulLayoutSession
+        session = StatefulLayoutSession.from_solution(case, solution, session_id=job_id)
+        from session_store import get_layout_session_store
+        await get_layout_session_store().save(session)
+        
         result = solution_to_api(solution, case, elapsed_ms)
         update_job(
             job_id,
@@ -528,3 +545,44 @@ async def _run_optimizer(job_id: str, input_data: OptimizationInput) -> None:
     finally:
         await asyncio.sleep(5.0)
         cleanup_queue(job_id)
+
+
+def _case_data_to_dict(case) -> dict:
+    """Convert a backend CaseData dataclass into an API-compatible dict.
+
+    CaseData uses stdlib dataclasses with nested objects (Warehouse, Point,
+    etc.) which don't support Pydantic's ``model_dump()``.  We rebuild the
+    dict in the shape that ``OptimizationInput`` expects so the frontend
+    can consume it directly.
+    """
+
+    return {
+        "warehouse": [
+            {"x": v.x, "y": v.y} for v in case.warehouse.vertices
+        ],
+        "obstacles": [
+            {
+                "x": obs.x,
+                "y": obs.y,
+                "width": obs.width,
+                "depth": obs.depth,
+            }
+            for obs in case.obstacles
+        ],
+        "ceiling": [
+            {"x": bp[0], "height": bp[1]}
+            for bp in case.ceiling.breakpoints
+        ],
+        "bay_types": [
+            {
+                "id": bt.id,
+                "width": bt.width,
+                "depth": bt.depth,
+                "height": bt.height,
+                "gap": bt.gap,
+                "nLoads": bt.n_loads,
+                "price": bt.price,
+            }
+            for bt in case.bay_types
+        ],
+    }

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Optimizing Layout... - Mecalux{% endblock %}
+
+{% block content %}
+<div class="px-5 py-6 md:px-8 h-[calc(100vh-100px)] flex flex-col items-center justify-center text-center">
+  <div class="max-w-md w-full rounded-3xl border border-blue-100 bg-white p-8 shadow-xl">
+    <h1 class="text-2xl font-black text-slate-900 mb-2">Optimizing Layout</h1>
+    <p class="text-sm text-slate-500 mb-8">Please wait while the algorithm searches for the best configuration...</p>
+    
+    <div class="mb-4">
+      <div class="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+        <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-[#4C91C6] to-[#F4A261] transition-all duration-300 w-[5%]"></div>
+      </div>
+    </div>
+    
+    <p id="progress-text" class="text-sm font-bold text-slate-600">Starting...</p>
+  </div>
+</div>
+
+<script>
+  const jobId = "{{ job_id }}";
+  const source = new EventSource(`/api/v1/jobs/${jobId}/stream`);
+  
+  source.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    
+    if (data.event === "job_progress") {
+      document.getElementById("progress-bar").style.width = Math.max(5, data.percent) + "%";
+      document.getElementById("progress-text").textContent = data.message;
+    } else if (data.event === "job_completed") {
+      document.getElementById("progress-bar").style.width = "100%";
+      document.getElementById("progress-text").textContent = "Completed! Redirecting...";
+      source.close();
+      window.location.href = `/editor/${jobId}`;
+    } else if (data.event === "job_failed") {
+      document.getElementById("progress-bar").classList.replace("from-[#4C91C6]", "from-red-500");
+      document.getElementById("progress-bar").classList.replace("to-[#F4A261]", "to-red-400");
+      document.getElementById("progress-text").textContent = "Error: " + data.error;
+      document.getElementById("progress-text").classList.add("text-red-500");
+      source.close();
+    }
+  };
+</script>
+{% endblock %}

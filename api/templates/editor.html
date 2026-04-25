@@ -850,6 +850,30 @@
       }
     }
 
+    async function loadSession(sid) {
+      try {
+        const caseResp = await fetch(`/api/v1/session/${sid}/case`);
+        if (!caseResp.ok) throw new Error("Session expired or not found");
+        const data = await caseResp.json();
+        state.caseData = data;
+        state.layout = null;
+        state.selectedBayId = null;
+        state.previewPositions.clear();
+        state.bayTypeMap = new Map(data.bay_types.map((bayType) => [bayType.id, bayType]));
+        
+        const layoutResp = await fetch(`/api/v1/layout/${sid}`);
+        if (!layoutResp.ok) throw new Error("Layout expired or not found");
+        const layoutData = await layoutResp.json();
+        state.layout = layoutData;
+        state.selectedBayId = layoutData.bays[0]?.instance_id ?? null;
+        
+        elements.banner.textContent = `Live Editor Session`;
+        renderScene();
+      } catch (error) {
+        elements.message.textContent = error.message;
+      }
+    }
+
     elements.loadButton.addEventListener("click", loadSelectedTestcase);
     elements.optimiseButton.addEventListener("click", optimiseLayout);
     elements.rotateButton.addEventListener("click", rotateSelectedByStep);
@@ -863,9 +887,16 @@
       }
     });
 
-    fetchTestcases().catch((error) => {
-      elements.message.textContent = error.message;
-    });
+    const sessionId = "{{ session_id|default('') }}";
+    if (sessionId) {
+      // Hide testcase controls
+      elements.caseSelect.parentElement.style.display = "none";
+      loadSession(sessionId);
+    } else {
+      fetchTestcases().catch((error) => {
+        elements.message.textContent = error.message;
+      });
+    }
   </script>
 </body>
 </html>
