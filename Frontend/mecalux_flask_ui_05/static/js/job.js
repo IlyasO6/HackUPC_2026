@@ -50,7 +50,7 @@ function jobMonitor(projectId, initialLayout) {
         points.push({ x: Number(o.x || 0) + Number(o.w || o.width || 0), y: Number(o.y || 0) + Number(o.h || o.depth || 0) });
       });
       this.resultBays.forEach((b) => {
-        const size = this.baySize(b);
+        const size = this.bayFootprintSize(b);
         points.push({ x: Number(b.x || 0), y: Number(b.y || 0) });
         points.push({ x: Number(b.x || 0) + size.w, y: Number(b.y || 0) + size.h });
       });
@@ -96,21 +96,44 @@ function jobMonitor(projectId, initialLayout) {
       return { w, h };
     },
 
+    bayGap(bay) {
+      if (bay.gap !== undefined && bay.gap !== null) return Math.max(0, Number(bay.gap || 0));
+      const type = this.bayTypes.find((t) => String(t.id) === String(bay.id || bay.bayTypeId));
+      return Math.max(0, Number(type?.gap || 0));
+    },
+
+    bayFootprintSize(bay) {
+      const size = this.baySize(bay);
+      return { w: size.w, h: size.h + this.bayGap(bay) };
+    },
+
     rectStyle(item) {
-      const x = this.toScreenX(item.x);
-      const y = this.toScreenY(item.y);
-      const w = Number(item.w || item.width || 0) * this.bounds.scale;
-      const h = Number(item.h || item.depth || 0) * this.bounds.scale;
+      const b = this.bounds;
+      const x = b.offsetX + (Number(item.x || 0) - b.minX) * b.scale;
+      const y = b.offsetY + (Number(item.y || 0) - b.minY) * b.scale;
+      const w = Number(item.w || item.width || 0) * b.scale;
+      const h = Number(item.h || item.depth || 0) * b.scale;
       return `left:${x}px; top:${y}px; width:${w}px; height:${h}px;`;
     },
 
     bayStyle(bay) {
+      const b = this.bounds;
       const size = this.baySize(bay);
-      const x = this.toScreenX(bay.x);
-      const y = this.toScreenY(bay.y);
-      const w = size.w * this.bounds.scale;
-      const h = size.h * this.bounds.scale;
-      return `left:${x}px; top:${y}px; width:${w}px; height:${h}px;`;
+      const footprint = this.bayFootprintSize(bay);
+      const x = b.offsetX + (Number(bay.x || 0) - b.minX) * b.scale;
+      const y = b.offsetY + (Number(bay.y || 0) - b.minY) * b.scale;
+      const w = footprint.w * b.scale;
+      const h = footprint.h * b.scale;
+      const rackDepth = size.h * b.scale;
+      const gapDepth = this.bayGap(bay) * b.scale;
+      return [
+        `left:${x}px`,
+        `top:${y}px`,
+        `width:${w}px`,
+        `height:${h}px`,
+        `--rack-depth:${rackDepth}px`,
+        `--gap-depth:${gapDepth}px`,
+      ].join("; ");
     },
 
     async runJob() {

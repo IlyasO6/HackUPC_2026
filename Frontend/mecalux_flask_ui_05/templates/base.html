@@ -25,14 +25,14 @@
           </a>
 
           <div class="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex">
-            <a class="nav-link" href="#challenge">Challenge</a>
-            <a class="nav-link" href="#workflow">Workflow</a>
-            <a class="nav-link" href="#projects">Cases</a>
+            <a class="nav-link" href="{{ url_for('dashboard') }}#challenge">Challenge</a>
+            <a class="nav-link" href="{{ url_for('dashboard') }}#workflow">Workflow</a>
+            <a class="nav-link" href="{{ url_for('dashboard') }}#projects">Cases</a>
           </div>
 
           <div class="flex items-center gap-3">
             <span class="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700 sm:inline-flex" title="Backend URL: {{ backend_url }}">{{ backend_mode }} mode</span>
-            <a href="#projects" class="rounded-full bg-[#F58220] px-4 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-orange-500/20 hover:-translate-y-0.5 hover:bg-[#e87310]">Start</a>
+            <a href="{{ url_for('dashboard') }}#projects" class="rounded-full bg-[#F58220] px-4 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-orange-500/20 hover:-translate-y-0.5 hover:bg-[#e87310]">Start</a>
           </div>
         </div>
       </nav>
