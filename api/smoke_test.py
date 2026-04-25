@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
-"""Smoke test: all imports."""
-import sys, os
+"""Minimal import smoke test for the API package."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+
 sys.path.insert(0, os.path.dirname(__file__))
-from bridge import to_case_data
-from scorer import calculate_score
+
+from bridge import snap_rotation, to_case_data
+from layout_session import StatefulLayoutSession
 from routes import router
-print("ALL OK - no import errors")
+
+
+print("bridge ok", snap_rotation(44.0))
+print("session class ok", StatefulLayoutSession.__name__)
+print("route count", len(router.routes))

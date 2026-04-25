@@ -1,64 +1,221 @@
 {% extends "base.html" %}
-{% block title %}Warehouse Editor · Mecalux{% endblock %}
+{% block title %}Warehouse Editor - Mecalux{% endblock %}
 
 {% block content %}
-<div x-data='warehouseEditor({{ layout | tojson }}, "{{ project_id }}")' class="editor-shell grid gap-6 px-5 py-6 md:px-8 lg:grid-cols-[360px_minmax(0,1fr)]">
+<div
+  x-data='warehouseEditor({{ layout | tojson }}, "{{ project_id }}")'
+  class="editor-shell grid gap-6 px-5 py-6 md:px-8 lg:grid-cols-[380px_minmax(0,1fr)]"
+>
   <aside class="editor-sidebar rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-    <a href="{{ url_for('dashboard') }}" class="text-sm text-blue-200 hover:text-blue-100">← Back to dashboard</a>
-    <h1 class="mt-4 text-3xl font-black">Warehouse Editor</h1>
-    <p class="mt-2 text-sm text-slate-400">Interactive mock editor. Choose bay types, drag shelves and set custom angles before sending the layout payload.</p>
-    <div class="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
-      <p><b>Source:</b> <span x-text="warehouse.source || 'Manual project'"></span></p>
-      <p><b>Coords:</b> auto-scaled/centered, including negative coordinates.</p>
-      <p><b>Bay types:</b> <span x-text="bayTypes.length"></span> · <b>Obstacles:</b> <span x-text="obstacles.length"></span></p>
-      <p><b>Selected type:</b> <span x-text="selectedBayTypeId || 'none'"></span></p>
+    <a href="{{ url_for('dashboard') }}" class="text-sm text-blue-200 hover:text-blue-100">
+      Back to dashboard
+    </a>
+
+    <div class="mt-4 flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-3xl font-black">Warehouse Editor</h1>
+        <p class="mt-2 text-sm text-slate-400">
+          Save the project locally in Flask. In real mode, save also validates
+          against the FastAPI backend before it is accepted.
+        </p>
+      </div>
+      <span
+        class="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-black uppercase tracking-[.18em] text-blue-200"
+        x-text="backendMode"
+      ></span>
     </div>
 
+    <div class="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
+      <p><b>Source:</b> <span x-text="warehouse.source || 'Manual project'"></span></p>
+      <p><b>Coords:</b> backend-compatible anchor coordinates with front-gap semantics.</p>
+      <p><b>Bay presets:</b> <span x-text="bayTypes.length"></span> - <b>Obstacles:</b> <span x-text="obstacles.length"></span></p>
+    </div>
+
+    <section class="mt-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-bold">Add bay by measurements</h2>
+        <span class="text-xs text-slate-500">gap may overlap only other gaps</span>
+      </div>
+      <div class="mt-4 manual-input-grid">
+        <label>
+          <span>Label</span>
+          <input x-model="draftBay.label" type="text" placeholder="Custom bay" />
+        </label>
+        <label>
+          <span>Width</span>
+          <input x-model.number="draftBay.width" type="number" min="1" step="25" />
+        </label>
+        <label>
+          <span>Depth</span>
+          <input x-model.number="draftBay.depth" type="number" min="1" step="25" />
+        </label>
+        <label>
+          <span>Height</span>
+          <input x-model.number="draftBay.height" type="number" min="0" step="25" />
+        </label>
+        <label>
+          <span>Gap depth</span>
+          <input x-model.number="draftBay.gap" type="number" min="0" step="25" />
+        </label>
+        <label>
+          <span>Loads</span>
+          <input x-model.number="draftBay.nLoads" type="number" min="0" step="1" />
+        </label>
+        <label>
+          <span>Price</span>
+          <input x-model.number="draftBay.price" type="number" min="0" step="1" />
+        </label>
+      </div>
+      <button
+        @click="addShelf()"
+        class="mt-4 w-full rounded-2xl bg-blue-500 px-4 py-3 font-bold hover:bg-blue-400"
+      >
+        Add bay
+      </button>
+    </section>
+
+    <section class="mt-6">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-bold">Use preset</h2>
+        <span class="text-xs text-slate-500" x-text="`${bayTypes.length} loaded`"></span>
+      </div>
+      <div
+        x-show="bayTypes.length === 0"
+        class="mt-3 rounded-2xl border border-dashed border-white/10 p-3 text-sm text-slate-500"
+      >
+        Upload a challenge case to load existing bay presets.
+      </div>
+      <div class="mt-3 max-h-60 space-y-2 overflow-auto pr-1">
+        <template x-for="bay in bayTypes" :key="bay.id">
+          <button
+            @click="applyPreset(bay)"
+            class="w-full rounded-2xl border p-3 text-left text-sm transition"
+            :class="bayTypeMatchesDraft(bay) ? 'border-orange-300/60 bg-orange-400/15 ring-2 ring-orange-300/30' : 'border-white/10 bg-slate-900/70 hover:bg-slate-900'"
+          >
+            <div class="flex items-center gap-3">
+              <div class="grid h-16 w-28 place-items-center rounded-xl border border-blue-200/30 bg-slate-950/60">
+                <div class="bay-footprint-preview" :style="bayFootprintPreviewStyle(bay)">
+                  <span class="bay-preview-rack"></span>
+                  <span
+                    x-show="Number(bay.gap || 0) > 0"
+                    class="bay-preview-gap"
+                  ></span>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <b class="truncate" x-text="bay.label || bay.id"></b>
+                  <span
+                    class="rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] text-blue-100"
+                    x-text="`${bay.nLoads || 0} loads`"
+                  ></span>
+                </div>
+                <p class="mt-1 text-xs text-slate-400">
+                  <span x-text="bay.width"></span> x
+                  <span x-text="bay.depth"></span> mm - gap
+                  <span x-text="bay.gap || 0"></span>
+                </p>
+              </div>
+            </div>
+          </button>
+        </template>
+      </div>
+    </section>
+
     <div class="mt-6 grid grid-cols-2 gap-3">
-      <button @click="addShelf()" class="rounded-2xl bg-blue-500 px-4 py-3 font-bold hover:bg-blue-400">Add selected bay</button>
-      <button @click="clearShelves" class="rounded-2xl border border-white/10 px-4 py-3 font-bold hover:bg-white/10">Clear</button>
+      <button
+        @click="clearShelves"
+        class="rounded-2xl border border-white/10 px-4 py-3 font-bold hover:bg-white/10"
+      >
+        Clear
+      </button>
       <button
         @click="saveLayout"
         :disabled="saving"
-        class="col-span-2 rounded-2xl bg-emerald-500 px-4 py-3 font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+        class="rounded-2xl bg-emerald-500 px-4 py-3 font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span x-show="!saving">Save layout</span>
         <span x-show="saving">Saving...</span>
       </button>
-      <a href="{{ url_for('optimization_page', project_id=project_id) }}" class="col-span-2 block rounded-2xl bg-purple-500 px-4 py-3 text-center font-bold hover:bg-purple-400">Run optimization →</a>
+      <a
+        href="{{ url_for('optimization_page', project_id=project_id) }}"
+        class="col-span-2 block rounded-2xl bg-purple-500 px-4 py-3 text-center font-bold hover:bg-purple-400"
+      >
+        Run optimization ->
+      </a>
     </div>
 
-    <div x-show="saved" x-transition class="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-200">Layout saved to mock API.</div>
-    <div x-show="saveError" x-transition class="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" x-text="saveError"></div>
+    <div
+      x-show="saved"
+      x-transition
+      class="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-200"
+    >
+      Layout saved in Flask state.
+    </div>
+    <div
+      x-show="saveError"
+      x-transition
+      class="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200"
+      x-text="saveError"
+    ></div>
+    <template x-if="validationIssues.length">
+      <div class="mt-4 rounded-2xl border border-orange-400/30 bg-orange-400/10 p-3 text-sm text-orange-100">
+        <p class="font-bold">Backend validation issues</p>
+        <ul class="mt-2 space-y-1 text-xs">
+          <template x-for="issue in validationIssues" :key="issue.message || issue">
+            <li x-text="issue.message || issue"></li>
+          </template>
+        </ul>
+      </div>
+    </template>
 
     <div class="mt-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
       <h2 class="font-bold">Selected shelf</h2>
       <div x-show="selectedShelf" class="mt-3 text-sm text-slate-300">
-        <p><b x-text="selectedShelf?.label"></b> · <span x-text="selectedShelf?.rotation || 0"></span>°</p>
+        <p>
+          <b x-text="selectedShelf?.label"></b> -
+          <span x-text="selectedShelf?.rotation || 0"></span> deg
+        </p>
         <p>x:<span x-text="selectedShelf?.x"></span> y:<span x-text="selectedShelf?.y"></span></p>
-        <p>w:<span x-text="selectedShelf?.w"></span> h:<span x-text="selectedShelf?.h"></span> gap:<span x-text="selectedShelf?.gap || 0"></span></p>
+        <p>
+          w:<span x-text="selectedShelf?.w"></span>
+          h:<span x-text="selectedShelf?.h"></span>
+          gap:<span x-text="selectedShelf?.gap || 0"></span>
+        </p>
 
         <label class="mt-4 block text-xs font-bold uppercase tracking-[.2em] text-blue-200">Angle</label>
         <div class="mt-2 flex items-center gap-3">
           <input
             type="range"
             min="0"
-            max="359"
-            step="1"
+            max="330"
+            step="30"
             :value="selectedShelf?.rotation || 0"
             @input="setSelectedRotation($event.target.value)"
             class="angle-slider flex-1"
-          >
-          <span class="w-14 rounded-xl border border-white/10 bg-slate-900 px-2 py-1 text-center font-bold text-orange-200" x-text="`${selectedShelf?.rotation || 0}°`"></span>
+          />
+          <span
+            class="w-16 rounded-xl border border-white/10 bg-slate-900 px-2 py-1 text-center font-bold text-orange-200"
+            x-text="`${selectedShelf?.rotation || 0} deg`"
+          ></span>
         </div>
         <div class="mt-3 grid grid-cols-4 gap-2">
           <template x-for="angle in [0, 90, 180, 270]" :key="angle">
-            <button @click="setSelectedRotation(angle)" class="rounded-xl border border-white/10 px-2 py-1 text-xs hover:bg-white/10" x-text="`${angle}°`"></button>
+            <button
+              @click="setSelectedRotation(angle)"
+              class="rounded-xl border border-white/10 px-2 py-1 text-xs hover:bg-white/10"
+              x-text="`${angle} deg`"
+            ></button>
           </template>
         </div>
       </div>
-      <p x-show="!selectedShelf" class="mt-3 text-sm text-slate-500">Click or drag a shelf to select it.</p>
-      <div x-show="selectedShelf" class="mt-4 border-t border-white/10 pt-4 text-sm text-slate-300">
+      <p x-show="!selectedShelf" class="mt-3 text-sm text-slate-500">
+        Click or drag a shelf to select it.
+      </p>
+      <div
+        x-show="selectedShelf"
+        class="mt-4 border-t border-white/10 pt-4 text-sm text-slate-300"
+      >
         <label class="block text-xs font-bold uppercase tracking-[.2em] text-orange-200">Gap clearance</label>
         <div class="mt-2 grid grid-cols-[1fr_92px] items-center gap-3">
           <input
@@ -69,7 +226,7 @@
             :value="selectedShelf?.gap || 0"
             @input="setSelectedGap($event.target.value)"
             class="gap-slider"
-          >
+          />
           <input
             type="number"
             min="0"
@@ -77,45 +234,13 @@
             :value="selectedShelf?.gap || 0"
             @change="setSelectedGap($event.target.value)"
             class="rounded-xl border border-white/10 bg-slate-900 px-2 py-1 text-right font-bold text-orange-200 outline-none focus:border-orange-300"
-          >
+          />
         </div>
         <p class="mt-2 text-xs text-slate-500">
-          Footprint depth: <span x-text="Number(selectedShelf?.h || 0) + shelfGap(selectedShelf || {})"></span> mm
+          Total footprint width:
+          <span x-text="Number(selectedShelf?.w || 0) + Number(selectedShelf?.gap || 0)"></span>
+          mm
         </p>
-      </div>
-    </div>
-
-    <div class="mt-6">
-      <h2 class="font-bold">Bay types</h2>
-      <p class="mt-1 text-xs text-slate-400">Select a bay type, then press “Add selected bay”.</p>
-      <div x-show="bayTypes.length === 0" class="mt-3 rounded-2xl border border-dashed border-white/10 p-3 text-sm text-slate-500">
-        No bay types loaded yet. Upload a public case to see the shapes here.
-      </div>
-      <div class="mt-3 max-h-72 space-y-2 overflow-auto pr-1">
-        <template x-for="bay in bayTypes" :key="bay.id">
-          <button
-            @click="selectBayType(bay)"
-            class="w-full rounded-2xl border p-3 text-left text-sm transition"
-            :class="selectedBayTypeId === bay.id ? 'border-orange-300/60 bg-orange-400/15 ring-2 ring-orange-300/30' : 'border-white/10 bg-slate-900/70 hover:bg-slate-900'"
-          >
-            <div class="flex items-center gap-3">
-              <div class="grid h-16 w-24 place-items-center rounded-xl border border-blue-200/30 bg-slate-950/60">
-                <div class="bay-footprint-preview" :style="bayFootprintPreviewStyle(bay)">
-                  <span x-show="bayGap(bay) > 0" class="bay-preview-gap" :style="bayGapPreviewStyle(bay)"></span>
-                  <span class="bay-preview-rack" :style="bayRackPreviewStyle(bay)"></span>
-                </div>
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between gap-2">
-                  <b class="truncate" x-text="`Type ${bay.id}`"></b>
-                  <span class="rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] text-blue-100" x-text="`${bay.nLoads || 0} loads`"></span>
-                </div>
-                <p class="mt-1 text-xs text-slate-400"><span x-text="bay.width"></span> × <span x-text="bay.depth"></span> mm · gap <span x-text="bay.gap || 0"></span></p>
-                <p class="text-xs text-slate-500">€/load: <span x-text="unitCost(bay)"></span></p>
-              </div>
-            </div>
-          </button>
-        </template>
       </div>
     </div>
 
@@ -133,9 +258,12 @@
             >
               <div class="flex items-center justify-between gap-2">
                 <b class="truncate" x-text="shelf.label"></b>
-                <span class="text-xs text-slate-400" x-text="`${shelf.rotation || 0}°`"></span>
+                <span class="text-xs text-slate-400" x-text="`${shelf.rotation || 0} deg`"></span>
               </div>
-              <p class="truncate text-slate-400">x:<span x-text="shelf.x"></span> y:<span x-text="shelf.y"></span> · type <span x-text="shelf.bayTypeId || '-' "></span></p>
+              <p class="truncate text-slate-400">
+                x:<span x-text="shelf.x"></span> y:<span x-text="shelf.y"></span>
+                - type <span x-text="shelf.bayTypeId || '-'"></span>
+              </p>
             </button>
             <button
               @click.stop="removeShelf(shelf.id)"
@@ -143,7 +271,16 @@
               title="Delete shelf"
               aria-label="Delete shelf"
             >
-              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg
+                class="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M3 6h18" />
                 <path d="M8 6V4h8v2" />
                 <path d="M19 6l-1 14H6L5 6" />
@@ -161,10 +298,16 @@
     <div class="mb-4 flex items-center justify-between">
       <div>
         <h2 class="text-xl font-bold">Canvas grid</h2>
-        <p class="text-sm text-slate-400">Drag shelves to move them. Select one and use the angle slider for custom rotation.</p>
+        <p class="text-sm text-slate-400">
+          Drag shelves to move them. The striped zone is the front gap; it may
+          overlap only other gaps.
+        </p>
       </div>
       <div class="flex items-center gap-3">
-        <span class="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300" x-text="`${shelves.length} shelves`"></span>
+        <span
+          class="rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300"
+          x-text="`${shelves.length} shelves`"
+        ></span>
         <button
           @click="deleteSelectedShelf"
           :disabled="!selectedShelf"
@@ -172,7 +315,16 @@
           title="Delete selected shelf"
           aria-label="Delete selected shelf"
         >
-          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg
+            class="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="M3 6h18" />
             <path d="M8 6V4h8v2" />
             <path d="M19 6l-1 14H6L5 6" />
@@ -191,11 +343,24 @@
       class="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-inner"
       style="height:650px; max-width:1000px; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px); background-size: 25px 25px;"
     >
-      <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 650" preserveAspectRatio="none">
-        <polygon :points="warehousePolygonPoints()" fill="rgba(15, 23, 42, .55)" stroke="rgba(125, 211, 252, .85)" stroke-width="3"></polygon>
+      <svg
+        class="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox="0 0 1000 650"
+        preserveAspectRatio="none"
+      >
+        <polygon
+          :points="warehousePolygonPoints()"
+          fill="rgba(15, 23, 42, .55)"
+          stroke="rgba(125, 211, 252, .85)"
+          stroke-width="3"
+        ></polygon>
       </svg>
+
       <template x-for="obs in obstacles" :key="obs.id">
-        <div class="absolute rounded-xl border border-red-300/40 bg-red-500/60" :style="rectStyle(obs)">
+        <div
+          class="absolute rounded-xl border border-red-300/40 bg-red-500/60"
+          :style="rectStyle(obs)"
+        >
           <span class="p-2 text-xs font-bold">Obstacle</span>
         </div>
       </template>
@@ -207,13 +372,6 @@
           :class="selectedShelfId === shelf.id ? 'is-selected' : 'is-default'"
           :style="shelfStyle(shelf)"
         >
-          <span
-            x-show="shelfGap(shelf) > 0"
-            class="shelf-gap-zone"
-            :title="`${shelfGap(shelf)} mm gap`"
-          >
-            <span x-show="gapLabelVisible(shelf)" class="shelf-gap-label">gap</span>
-          </span>
           <span class="shelf-rack-body relative block">
             <span class="rack-depth-line rack-depth-left"></span>
             <span class="rack-depth-line rack-depth-right"></span>
@@ -224,7 +382,14 @@
             <span class="rack-post rack-post-bottom-left"></span>
             <span class="rack-post rack-post-bottom-right"></span>
             <span class="rack-label" x-text="shelf.label"></span>
-            <span class="absolute bottom-1 right-2 text-[10px] opacity-80" x-text="`${shelf.rotation || 0}°`"></span>
+            <span class="rack-rotation" x-text="`${shelf.rotation || 0} deg`"></span>
+          </span>
+          <span
+            x-show="Number(shelf.gap || 0) > 0"
+            class="shelf-gap-zone"
+            :title="`${shelf.gap} mm front gap`"
+          >
+            <span class="shelf-gap-label">gap</span>
           </span>
         </button>
       </template>
@@ -234,5 +399,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/editor.js', v='layout-real-2') }}"></script>
 {% endblock %}

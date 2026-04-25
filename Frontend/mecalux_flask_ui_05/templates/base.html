@@ -6,11 +6,20 @@
     <title>{% block title %}Mecalux Smart Optimizer{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    {% if backend_mode == "mock" %}
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    {% endif %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='layout-5') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='layout-real-2') }}" />
+    <script>
+      window.APP_CONFIG = {{ {
+        "backendMode": backend_mode,
+        "backendUrl": backend_url,
+      } | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/layout_geometry.js', v='layout-real-2') }}"></script>
   </head>
   <body class="min-h-screen bg-[#f4f6f8] text-[#222222]">
     <div class="relative z-10">

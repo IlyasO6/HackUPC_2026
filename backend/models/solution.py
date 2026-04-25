@@ -1,4 +1,4 @@
-"""Solution output model with arbitrary rotation support."""
+"""Solution output model with discrete 30-degree rotation support."""
 
 from __future__ import annotations
 import math
@@ -15,20 +15,21 @@ def _fmt_num(value: float) -> str:
 
 @dataclass(frozen=True, slots=True)
 class PlacedBay:
-    """A bay placed in the warehouse at arbitrary rotation.
+    """A bay placed in the warehouse.
 
     Local coordinate frame of the bay:
       - (0, 0)     = back-left corner (x=0 is the BACK)
       - (width, 0) = front-left corner (x=width is the FRONT)
       - The gap extends outward from the front face (x=width edge)
 
-    Rotation is counter-clockwise in degrees [0, 180] around (0,0),
-    then translated to world position (x, y).
+    Rotation is counter-clockwise in degrees around ``(0, 0)``, then
+    translated to world position ``(x, y)``. The live system snaps rotations
+    to the challenge lattice ``{0, 30, ..., 330}``.
     """
     bay_type_id: int
     x: float
     y: float
-    rotation: float  # degrees, [0, 180]
+    rotation: float
 
     def _transform(self, lx: float, ly: float, cos_t: float, sin_t: float) -> tuple[float, float]:
         return (self.x + lx * cos_t - ly * sin_t,

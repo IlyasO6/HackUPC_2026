@@ -1,67 +1,47 @@
-"""
-Bridge between API Pydantic models and Backend dataclass models.
+"""Conversions between API models and backend dataclass models."""
 
-The API uses Pydantic models (api/api_models.py) for serialization/validation.
-The Backend uses plain dataclasses (backend/models/) for computation.
-This module converts between the two so the API can delegate real work
-to the backend's solver, scorer, and validator.
-"""
+from __future__ import annotations
 
-import sys
 import os
+import sys
 
-# Add backend to sys.path for backend internal imports
-_backend_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend"))
-if _backend_dir not in sys.path:
-    sys.path.insert(0, _backend_dir)
+from api_models import OptimizationInput, PlacedBay as ApiPlacedBay, SolveResult
+from api_config import ANGLE_STEP_DEGREES, FULL_TURN_DEGREES
 
-# API Pydantic models (renamed to api_models.py to avoid collision)
-from api_models import OptimizationInput, PlacedBay as APIPlacedBay, SolveResult
+_BACKEND_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
+)
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
 
-# Backend domain models (from backend/models/ package)
-from models.warehouse import Point, Warehouse
-from models.obstacle import Obstacle as BackendObstacle
-from models.ceiling import CeilingProfile
 from models.bay_type import BayType as BackendBayType
 from models.case_data import CaseData
+from models.ceiling import CeilingProfile
+from models.obstacle import Obstacle as BackendObstacle
 from models.solution import PlacedBay as BackendPlacedBay, Solution
+from models.warehouse import Point, Warehouse
 
 
-# ─── API → Backend conversions ───────────────────────────────────────────────
+def snap_rotation(angle: float) -> float:
+    """Snap ``angle`` to the nearest valid 30-degree rotation."""
+
+    snapped = round(float(angle) / ANGLE_STEP_DEGREES) * ANGLE_STEP_DEGREES
+    snapped %= FULL_TURN_DEGREES
+    if abs(snapped - FULL_TURN_DEGREES) < 1e-9:
+        snapped = 0.0
+    if abs(snapped) < 1e-9:
+        return 0.0
+    return round(snapped, 6)
 
 
 def to_case_data(input_data: OptimizationInput) -> CaseData:
-    """Convert API OptimizationInput (Pydantic) → backend CaseData (dataclass)."""
-    warehouse = Warehouse(
-        vertices=[Point(x=int(p.x), y=int(p.y)) for p in input_data.warehouse]
-    )
-    obstacles = [
-        BackendObstacle(
-            x=int(o.x), y=int(o.y),
-            width=int(o.width), depth=int(o.depth),
-        )
-        for o in input_data.obstacles
-    ]
-    ceiling = CeilingProfile(
-        breakpoints=[(int(c.x), int(c.height)) for c in input_data.ceiling]
-    )
-    bay_types = [
-        BackendBayType(
-            id=bt.id,
-            width=int(bt.width),
-            depth=int(bt.depth),
-            height=int(bt.height),
-            gap=int(bt.gap),
-            n_loads=bt.nLoads,
-            price=int(bt.price),
-        )
-        for bt in input_data.bay_types
-    ]
-    return CaseData(
-        warehouse=warehouse,
-        obstacles=obstacles,
-        ceiling=ceiling,
-        bay_types=bay_types,
+    """Convert ``OptimizationInput`` into backend ``CaseData``."""
+
+    return dicts_to_case_data(
+        warehouse=[point.model_dump() for point in input_data.warehouse],
+        obstacles=[obstacle.model_dump() for obstacle in input_data.obstacles],
+        ceiling=[point.model_dump() for point in input_data.ceiling],
+        bay_types=[bay_type.model_dump() for bay_type in input_data.bay_types],
     )
 
 
@@ -71,50 +51,62 @@ def dicts_to_case_data(
     ceiling: list[dict],
     bay_types: list[dict],
 ) -> CaseData:
-    """Convert raw dict lists (from ScoreRequest) → backend CaseData."""
-    wh = Warehouse(
-        vertices=[Point(x=int(p["x"]), y=int(p["y"])) for p in warehouse]
+    """Convert primitive dictionaries into backend ``CaseData``."""
+
+    backend_warehouse = Warehouse(
+        vertices=[
+            Point(x=int(point["x"]), y=int(point["y"]))
+            for point in warehouse
+        ]
     )
-    obs = [
+    backend_obstacles = [
         BackendObstacle(
-            x=int(o["x"]), y=int(o["y"]),
-            width=int(o["width"]), depth=int(o["depth"]),
+            x=int(obstacle["x"]),
+            y=int(obstacle["y"]),
+            width=int(obstacle["width"]),
+            depth=int(obstacle["depth"]),
         )
-        for o in obstacles
+        for obstacle in obstacles
     ]
-    ceil = CeilingProfile(
-        breakpoints=[(int(c["x"]), int(c["height"])) for c in ceiling]
+    backend_ceiling = CeilingProfile(
+        breakpoints=[
+            (int(point["x"]), int(point["height"]))
+            for point in ceiling
+        ]
     )
-    bts = [
+    backend_bay_types = [
         BackendBayType(
-            id=int(bt["id"]),
-            width=int(bt["width"]),
-            depth=int(bt["depth"]),
-            height=int(bt["height"]),
-            gap=int(bt["gap"]),
-            n_loads=int(bt["nLoads"]),
-            price=int(bt["price"]),
+            id=int(bay_type["id"]),
+            width=int(bay_type["width"]),
+            depth=int(bay_type["depth"]),
+            height=int(bay_type["height"]),
+            gap=int(bay_type["gap"]),
+            n_loads=int(bay_type["nLoads"]),
+            price=int(bay_type["price"]),
         )
-        for bt in bay_types
+        for bay_type in bay_types
     ]
-    return CaseData(warehouse=wh, obstacles=obs, ceiling=ceil, bay_types=bts)
+    return CaseData(
+        warehouse=backend_warehouse,
+        obstacles=backend_obstacles,
+        ceiling=backend_ceiling,
+        bay_types=backend_bay_types,
+    )
 
 
 def dicts_to_solution(placed_bays: list[dict]) -> Solution:
-    """Convert placed bay dicts → backend Solution."""
+    """Convert primitive bay dictionaries into backend ``Solution``."""
+
     placements = [
         BackendPlacedBay(
-            bay_type_id=int(b.get("bay_type_id", b.get("id"))),
-            x=float(b["x"]),
-            y=float(b["y"]),
-            rotation=float(b["rotation"]),
+            bay_type_id=int(bay.get("bay_type_id", bay.get("id"))),
+            x=float(bay["x"]),
+            y=float(bay["y"]),
+            rotation=snap_rotation(float(bay["rotation"])),
         )
-        for b in placed_bays
+        for bay in placed_bays
     ]
     return Solution(placements=placements)
-
-
-# ─── Backend → API conversions ───────────────────────────────────────────────
 
 
 def solution_to_api(
@@ -122,30 +114,30 @@ def solution_to_api(
     case: CaseData,
     elapsed_ms: int,
 ) -> SolveResult:
-    """Convert backend Solution + CaseData → API SolveResult."""
+    """Convert a backend ``Solution`` into the legacy API response."""
+
     from scoring.scorer import compute_score
 
     q_score = compute_score(solution, case)
-    bt_map = case.bay_type_map
-
+    bay_type_map = case.bay_type_map
     total_area = sum(
-        bt_map[p.bay_type_id].width * bt_map[p.bay_type_id].depth
-        for p in solution.placements if p.bay_type_id in bt_map
+        bay_type_map[placement.bay_type_id].width
+        * bay_type_map[placement.bay_type_id].depth
+        for placement in solution.placements
+        if placement.bay_type_id in bay_type_map
     )
     coverage = total_area / case.warehouse.area if case.warehouse.area else 0.0
-
-    placed = [
-        APIPlacedBay(
-            id=p.bay_type_id,
-            x=p.x,
-            y=p.y,
-            rotation=p.rotation,
+    placed_bays = [
+        ApiPlacedBay(
+            id=placement.bay_type_id,
+            x=placement.x,
+            y=placement.y,
+            rotation=snap_rotation(placement.rotation),
         )
-        for p in solution.placements
+        for placement in solution.placements
     ]
-
     return SolveResult(
-        placed_bays=placed,
+        placed_bays=placed_bays,
         Q=round(q_score, 6),
         coverage=round(coverage, 6),
         solved_in_ms=elapsed_ms,

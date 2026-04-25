@@ -43,7 +43,9 @@ The evaluation algorithm will receive 4 distinct CSV files for a given case.
 
 ## 6. Backend Contracts
 * `X,Y` in the output represent the local bay origin on the `x = 0` back side.
-* `Rotation` is searched over `0°` to `180°`, with `180°` preserved as distinct from `0°` because the front gap flips sides.
+* `Rotation` is searched over the full discrete set
+  `0°, 30°, 60°, ..., 330°`, with opposite angles preserved as distinct
+  because the front gap flips sides.
 * Sample working baselines for backend-only development:
   * `Case0`: `Q <= 2089.13`
   * `Case1`: `Q <= 1347.63`

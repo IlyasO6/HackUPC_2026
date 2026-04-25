@@ -1,6 +1,5 @@
 from fastapi.testclient import TestClient
 from main import app
-import json
 
 client = TestClient(app)
 
@@ -17,11 +16,14 @@ if response.status_code == 200:
     data = response.json()
     print("Warehouse keys:", data.keys())
     print("Successfully loaded testcase!")
-    
-    print("\n3. Testing /api/v1/solve/json")
-    # Submit the testcase to the solver
-    solve_resp = client.post("/api/v1/solve/json", json=data)
-    print("Status:", solve_resp.status_code)
-    print("Response:", solve_resp.json())
+
+    print("\n3. Testing /api/v1/optimise")
+    optimise_resp = client.post("/api/v1/optimise", json=data)
+    print("Status:", optimise_resp.status_code)
+    if optimise_resp.status_code == 200:
+        result = optimise_resp.json()
+        print("Session:", result["session_id"])
+        print("Q:", result["Q"])
+        print("Bay count:", result["bay_count"])
 else:
     print("Failed to load testcase:", response.text)

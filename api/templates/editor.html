@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mecalux Layout Optimizer</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --panel: rgba(255, 251, 243, 0.92);
+      --panel-strong: #fffdf8;
+      --ink: #1f2a2b;
+      --muted: #53615f;
+      --accent: #cc5b2e;
+      --accent-soft: rgba(204, 91, 46, 0.12);
+      --good: #2f7d4b;
+      --bad: #c3392a;
+      --line: rgba(31, 42, 43, 0.12);
+      --shadow: 0 24px 60px rgba(43, 35, 24, 0.12);
+      --font-display: "Avenir Next", "Segoe UI", sans-serif;
+      --font-body: "IBM Plex Sans", "Trebuchet MS", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--font-body);
+      background:
+        radial-gradient(circle at top left, #fff7df 0, transparent 38%),
+        radial-gradient(circle at bottom right, #e7d8b7 0, transparent 44%),
+        linear-gradient(135deg, #f0eadc, var(--bg));
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      min-height: 100vh;
+      gap: 24px;
+      padding: 24px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .sidebar {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .headline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .headline h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(1.9rem, 4vw, 2.7rem);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+    }
+
+    .headline p,
+    .hint,
+    .message,
+    .case-meta {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .control-group {
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    select,
+    button {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid rgba(31, 42, 43, 0.16);
+      font: inherit;
+      padding: 14px 16px;
+    }
+
+    select {
+      background: var(--panel-strong);
+      color: var(--ink);
+    }
+
+    button {
+      cursor: pointer;
+      transition: transform 140ms ease, box-shadow 140ms ease,
+        background 140ms ease;
+      background: var(--ink);
+      color: #fff8ef;
+      box-shadow: 0 14px 30px rgba(31, 42, 43, 0.16);
+    }
+
+    button.secondary {
+      background: var(--panel-strong);
+      color: var(--ink);
+      box-shadow: none;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .metric strong {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      letter-spacing: -0.04em;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      width: fit-content;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .canvas-header {
+      position: absolute;
+      inset: 18px 18px auto 18px;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+
+    .banner,
+    .latency {
+      pointer-events: none;
+      border-radius: 999px;
+      padding: 10px 14px;
+      backdrop-filter: blur(10px);
+      background: rgba(255, 253, 248, 0.88);
+      border: 1px solid rgba(31, 42, 43, 0.1);
+      font-weight: 700;
+    }
+
+    .banner.invalid {
+      color: var(--bad);
+    }
+
+    .banner.valid {
+      color: var(--good);
+    }
+
+    svg {
+      width: 100%;
+      height: calc(100vh - 84px);
+      min-height: 540px;
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 243, 232, 0.95));
+      border: 1px solid rgba(31, 42, 43, 0.12);
+    }
+
+    .warehouse {
+      fill: rgba(47, 125, 75, 0.08);
+      stroke: rgba(47, 125, 75, 0.5);
+      stroke-width: 18;
+    }
+
+    .obstacle {
+      fill: rgba(31, 42, 43, 0.14);
+      stroke: rgba(31, 42, 43, 0.32);
+      stroke-width: 10;
+    }
+
+    .gap-zone {
+      fill: rgba(204, 91, 46, 0.09);
+      stroke: rgba(204, 91, 46, 0.18);
+      stroke-width: 8;
+    }
+
+    .bay {
+      cursor: grab;
+      fill: rgba(31, 42, 43, 0.78);
+      stroke: rgba(255, 253, 248, 0.86);
+      stroke-width: 8;
+      transition: opacity 120ms ease;
+    }
+
+    .bay.selected {
+      fill: var(--accent);
+    }
+
+    .bay.invalid {
+      fill: var(--bad);
+    }
+
+    .bay.dragging {
+      cursor: grabbing;
+      opacity: 0.85;
+    }
+
+    .bay-label {
+      fill: #fffaf1;
+      font-size: 140px;
+      font-weight: 700;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+
+    .empty-state {
+      fill: var(--muted);
+      font-size: 220px;
+      text-anchor: middle;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      svg {
+        height: 70vh;
+        min-height: 460px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <aside class="panel sidebar">
+      <section class="headline">
+        <span class="tag">Realtime Layout Session</span>
+        <h1>Warehouse optimizer with live edits.</h1>
+        <p>
+          Optimize once, then drag, rotate, and delete bays without calling the
+          heavy solver again.
+        </p>
+      </section>
+
+      <section class="control-group">
+        <label for="case-select">Testcase</label>
+        <select id="case-select"></select>
+        <button id="load-button" class="secondary" type="button">
+          Load geometry
+        </button>
+        <button id="optimise-button" type="button">
+          Optimise layout
+        </button>
+      </section>
+
+      <section class="metrics">
+        <article class="metric">
+          <span>Q</span>
+          <strong id="metric-q">-</strong>
+          <span id="metric-validity">No session</span>
+        </article>
+        <article class="metric">
+          <span>Bays</span>
+          <strong id="metric-bays">0</strong>
+          <span id="metric-coverage">Coverage 0%</span>
+        </article>
+        <article class="metric">
+          <span>Loads</span>
+          <strong id="metric-loads">0</strong>
+          <span id="metric-area">Area 0</span>
+        </article>
+        <article class="metric">
+          <span>Selected</span>
+          <strong id="metric-selected">-</strong>
+          <span id="metric-rotation">Rotation -</span>
+        </article>
+      </section>
+
+      <section class="control-group">
+        <button id="rotate-button" class="secondary" type="button">
+          Rotate selected +30°
+        </button>
+        <button id="delete-button" class="secondary" type="button">
+          Delete selected
+        </button>
+      </section>
+
+      <p id="case-meta" class="case-meta">
+        Load a testcase to inspect the warehouse and available bays.
+      </p>
+      <p id="message" class="message">
+        Drag updates are sent on pointer release. Double-click a bay to rotate.
+        Press Delete to remove the selected bay.
+      </p>
+      <p class="hint">
+        Invalid bays are painted red immediately from the API response. Rotation
+        is snapped to the nearest 30-degree step before every PATCH request.
+      </p>
+    </aside>
+
+    <section class="panel canvas-wrap">
+      <div class="canvas-header">
+        <div id="banner" class="banner">Awaiting testcase</div>
+        <div id="latency" class="latency">Patch latency --</div>
+      </div>
+      <svg id="canvas" viewBox="0 0 1000 700">
+        <g id="warehouse-layer"></g>
+        <g id="obstacle-layer"></g>
+        <g id="gap-layer"></g>
+        <g id="bay-layer"></g>
+        <g id="label-layer"></g>
+      </svg>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      caseData: null,
+      layout: null,
+      bayTypeMap: new Map(),
+      selectedBayId: null,
+      drag: null,
+      previewPositions: new Map(),
+    };
+
+    const elements = {
+      caseSelect: document.getElementById("case-select"),
+      loadButton: document.getElementById("load-button"),
+      optimiseButton: document.getElementById("optimise-button"),
+      rotateButton: document.getElementById("rotate-button"),
+      deleteButton: document.getElementById("delete-button"),
+      banner: document.getElementById("banner"),
+      latency: document.getElementById("latency"),
+      message: document.getElementById("message"),
+      caseMeta: document.getElementById("case-meta"),
+      metricQ: document.getElementById("metric-q"),
+      metricBays: document.getElementById("metric-bays"),
+      metricLoads: document.getElementById("metric-loads"),
+      metricArea: document.getElementById("metric-area"),
+      metricCoverage: document.getElementById("metric-coverage"),
+      metricValidity: document.getElementById("metric-validity"),
+      metricSelected: document.getElementById("metric-selected"),
+      metricRotation: document.getElementById("metric-rotation"),
+      canvas: document.getElementById("canvas"),
+      warehouseLayer: document.getElementById("warehouse-layer"),
+      obstacleLayer: document.getElementById("obstacle-layer"),
+      gapLayer: document.getElementById("gap-layer"),
+      bayLayer: document.getElementById("bay-layer"),
+      labelLayer: document.getElementById("label-layer"),
+    };
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+
+    function snapRotation(angle) {
+      const step = 30;
+      const snapped = Math.round(angle / step) * step;
+      const normalized = ((snapped % 360) + 360) % 360;
+      return normalized === 360 ? 0 : normalized;
+    }
+
+    function fmtNumber(value, digits = 3) {
+      if (value === null || value === undefined) {
+        return "-";
+      }
+      return Number(value).toFixed(digits).replace(/\.?0+$/, "");
+    }
+
+    function setBusy(isBusy, label) {
+      elements.optimiseButton.disabled = isBusy;
+      elements.loadButton.disabled = isBusy;
+      if (label) {
+        elements.banner.textContent = label;
+      }
+    }
+
+    function warehouseBounds() {
+      const points = state.caseData?.warehouse ?? [];
+      if (!points.length) {
+        return { minX: 0, minY: 0, maxX: 1000, maxY: 700 };
+      }
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      return {
+        minX: Math.min(...xs),
+        minY: Math.min(...ys),
+        maxX: Math.max(...xs),
+        maxY: Math.max(...ys),
+      };
+    }
+
+    function updateMetrics() {
+      const layout = state.layout;
+      const selected = currentSelectedBay();
+      elements.metricQ.textContent = layout?.Q == null ? "-" : fmtNumber(layout.Q, 6);
+      elements.metricBays.textContent = String(layout?.bay_count ?? 0);
+      elements.metricLoads.textContent = String(layout?.total_loads ?? 0);
+      elements.metricArea.textContent = `Area ${fmtNumber(layout?.total_bay_area ?? 0, 0)}`;
+      elements.metricCoverage.textContent =
+        `Coverage ${fmtNumber((layout?.coverage ?? 0) * 100, 2)}%`;
+      elements.metricValidity.textContent = layout
+        ? layout.valid ? "Valid layout" : "Conflicts detected"
+        : "No session";
+      elements.metricSelected.textContent = selected
+        ? selected.instance_id
+        : "-";
+      elements.metricRotation.textContent = selected
+        ? `Rotation ${fmtNumber(selected.rotation, 0)}°`
+        : "Rotation -";
+
+      const bannerText = layout?.message ?? "Awaiting testcase";
+      elements.banner.textContent = bannerText;
+      elements.banner.className =
+        "banner " + (layout ? (layout.valid ? "valid" : "invalid") : "");
+      elements.latency.textContent = layout?.latency_ms != null
+        ? `Patch latency ${fmtNumber(layout.latency_ms, 2)} ms`
+        : layout?.solved_in_ms != null
+          ? `Solve time ${layout.solved_in_ms} ms`
+          : "Patch latency --";
+      elements.message.textContent = layout?.message ??
+        "Drag updates are sent on pointer release.";
+
+      const caseData = state.caseData;
+      if (caseData) {
+        elements.caseMeta.textContent =
+          `${caseData.warehouse.length} warehouse vertices, ` +
+          `${caseData.obstacles.length} obstacles, ` +
+          `${caseData.bay_types.length} bay types.`;
+      }
+    }
+
+    function currentSelectedBay() {
+      if (!state.layout || !state.selectedBayId) {
+        return null;
+      }
+      return state.layout.bays.find(
+        (bay) => bay.instance_id === state.selectedBayId
+      ) ?? null;
+    }
+
+    function clearLayers() {
+      for (const layer of [
+        elements.warehouseLayer,
+        elements.obstacleLayer,
+        elements.gapLayer,
+        elements.bayLayer,
+        elements.labelLayer,
+      ]) {
+        layer.replaceChildren();
+      }
+    }
+
+    function toPoints(points) {
+      return points.map((point) => `${point[0]},${point[1]}`).join(" ");
+    }
+
+    function bayTypeFor(bay) {
+      return state.bayTypeMap.get(bay.bay_type_id);
+    }
+
+    function effectiveAnchor(bay) {
+      return state.previewPositions.get(bay.instance_id) ?? {
+        x: bay.x,
+        y: bay.y,
+      };
+    }
+
+    function bayGeometry(bay) {
+      const type = bayTypeFor(bay);
+      const origin = effectiveAnchor(bay);
+      const angle = (bay.rotation * Math.PI) / 180.0;
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const vx = -Math.sin(angle);
+      const vy = Math.cos(angle);
+      const body = [
+        [origin.x, origin.y],
+        [origin.x + type.width * ux, origin.y + type.width * uy],
+        [
+          origin.x + type.width * ux + type.depth * vx,
+          origin.y + type.width * uy + type.depth * vy,
+        ],
+        [origin.x + type.depth * vx, origin.y + type.depth * vy],
+      ];
+      const gap = type.gap > 0
+        ? [
+            [origin.x + type.width * ux, origin.y + type.width * uy],
+            [
+              origin.x + (type.width + type.gap) * ux,
+              origin.y + (type.width + type.gap) * uy,
+            ],
+            [
+              origin.x + (type.width + type.gap) * ux + type.depth * vx,
+              origin.y + (type.width + type.gap) * uy + type.depth * vy,
+            ],
+            [
+              origin.x + type.width * ux + type.depth * vx,
+              origin.y + type.width * uy + type.depth * vy,
+            ],
+          ]
+        : [];
+      return { body, gap };
+    }
+
+    function renderScene() {
+      clearLayers();
+      const caseData = state.caseData;
+      const bounds = warehouseBounds();
+      const padding = 800;
+      elements.canvas.setAttribute(
+        "viewBox",
+        [
+          bounds.minX - padding,
+          bounds.minY - padding,
+          bounds.maxX - bounds.minX + padding * 2,
+          bounds.maxY - bounds.minY + padding * 2,
+        ].join(" ")
+      );
+
+      if (!caseData) {
+        const text = document.createElementNS(SVG_NS, "text");
+        text.setAttribute("x", "500");
+        text.setAttribute("y", "350");
+        text.setAttribute("class", "empty-state");
+        text.textContent = "Load a testcase";
+        elements.labelLayer.append(text);
+        updateMetrics();
+        return;
+      }
+
+      const warehouse = document.createElementNS(SVG_NS, "polygon");
+      warehouse.setAttribute(
+        "points",
+        caseData.warehouse.map((point) => `${point.x},${point.y}`).join(" ")
+      );
+      warehouse.setAttribute("class", "warehouse");
+      elements.warehouseLayer.append(warehouse);
+
+      for (const obstacle of caseData.obstacles) {
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("x", obstacle.x);
+        rect.setAttribute("y", obstacle.y);
+        rect.setAttribute("width", obstacle.width);
+        rect.setAttribute("height", obstacle.depth);
+        rect.setAttribute("class", "obstacle");
+        elements.obstacleLayer.append(rect);
+      }
+
+      if (!state.layout?.bays?.length) {
+        const text = document.createElementNS(SVG_NS, "text");
+        text.setAttribute("x", (bounds.minX + bounds.maxX) / 2);
+        text.setAttribute("y", (bounds.minY + bounds.maxY) / 2);
+        text.setAttribute("class", "empty-state");
+        text.textContent = "Run optimisation";
+        elements.labelLayer.append(text);
+        updateMetrics();
+        return;
+      }
+
+      for (const bay of state.layout.bays) {
+        const { body, gap } = bayGeometry(bay);
+        if (gap.length) {
+          const gapShape = document.createElementNS(SVG_NS, "polygon");
+          gapShape.setAttribute("points", toPoints(gap));
+          gapShape.setAttribute("class", "gap-zone");
+          elements.gapLayer.append(gapShape);
+        }
+
+        const shape = document.createElementNS(SVG_NS, "polygon");
+        const classes = ["bay"];
+        if (state.selectedBayId === bay.instance_id) {
+          classes.push("selected");
+        }
+        if (!bay.valid) {
+          classes.push("invalid");
+        }
+        if (state.drag?.bayId === bay.instance_id) {
+          classes.push("dragging");
+        }
+        shape.setAttribute("points", toPoints(body));
+        shape.setAttribute("class", classes.join(" "));
+        shape.dataset.bayId = bay.instance_id;
+        shape.addEventListener("pointerdown", beginDrag);
+        shape.addEventListener("dblclick", async (event) => {
+          event.preventDefault();
+          state.selectedBayId = bay.instance_id;
+          await rotateSelectedByStep();
+        });
+        shape.addEventListener("click", () => {
+          state.selectedBayId = bay.instance_id;
+          updateMetrics();
+          renderScene();
+        });
+        elements.bayLayer.append(shape);
+
+        const center = centroid(body);
+        const label = document.createElementNS(SVG_NS, "text");
+        label.setAttribute("x", center.x);
+        label.setAttribute("y", center.y);
+        label.setAttribute("class", "bay-label");
+        label.textContent = `${bay.bay_type_id}`;
+        elements.labelLayer.append(label);
+      }
+
+      updateMetrics();
+    }
+
+    function centroid(points) {
+      const total = points.reduce(
+        (acc, point) => ({ x: acc.x + point[0], y: acc.y + point[1] }),
+        { x: 0, y: 0 }
+      );
+      return {
+        x: total.x / points.length,
+        y: total.y / points.length,
+      };
+    }
+
+    function svgPoint(event) {
+      const point = elements.canvas.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const matrix = elements.canvas.getScreenCTM();
+      if (!matrix) {
+        return { x: 0, y: 0 };
+      }
+      const transformed = point.matrixTransform(matrix.inverse());
+      return { x: transformed.x, y: transformed.y };
+    }
+
+    function beginDrag(event) {
+      if (!state.layout?.session_id) {
+        return;
+      }
+      const bayId = event.currentTarget.dataset.bayId;
+      const bay = state.layout.bays.find((item) => item.instance_id === bayId);
+      if (!bay) {
+        return;
+      }
+      state.selectedBayId = bayId;
+      const point = svgPoint(event);
+      const anchor = effectiveAnchor(bay);
+      state.drag = {
+        bayId,
+        offsetX: point.x - anchor.x,
+        offsetY: point.y - anchor.y,
+      };
+      elements.canvas.setPointerCapture(event.pointerId);
+      elements.canvas.addEventListener("pointermove", dragMove);
+      elements.canvas.addEventListener("pointerup", endDrag, { once: true });
+      elements.canvas.addEventListener("pointercancel", cancelDrag, { once: true });
+      renderScene();
+    }
+
+    function dragMove(event) {
+      if (!state.drag) {
+        return;
+      }
+      const point = svgPoint(event);
+      state.previewPositions.set(state.drag.bayId, {
+        x: point.x - state.drag.offsetX,
+        y: point.y - state.drag.offsetY,
+      });
+      renderScene();
+    }
+
+    async function endDrag(event) {
+      if (!state.drag) {
+        return;
+      }
+      const bayId = state.drag.bayId;
+      const preview = state.previewPositions.get(bayId);
+      cleanupDrag(event.pointerId);
+      if (!preview || !state.layout?.session_id) {
+        renderScene();
+        return;
+      }
+      await sendPatch("/api/v1/layout/move", {
+        session_id: state.layout.session_id,
+        bay_id: bayId,
+        x: preview.x,
+        y: preview.y,
+      });
+    }
+
+    function cancelDrag(event) {
+      cleanupDrag(event.pointerId);
+      renderScene();
+    }
+
+    function cleanupDrag(pointerId) {
+      if (pointerId !== undefined) {
+        try {
+          elements.canvas.releasePointerCapture(pointerId);
+        } catch (_) {
+        }
+      }
+      state.previewPositions.clear();
+      state.drag = null;
+      elements.canvas.removeEventListener("pointermove", dragMove);
+    }
+
+    async function rotateSelectedByStep() {
+      const bay = currentSelectedBay();
+      if (!bay || !state.layout?.session_id) {
+        return;
+      }
+      await sendPatch("/api/v1/layout/rotate", {
+        session_id: state.layout.session_id,
+        bay_id: bay.instance_id,
+        rotation: snapRotation(bay.rotation + 30),
+      });
+    }
+
+    async function deleteSelected() {
+      const bay = currentSelectedBay();
+      if (!bay || !state.layout?.session_id) {
+        return;
+      }
+      await sendPatch("/api/v1/layout/delete", {
+        session_id: state.layout.session_id,
+        bay_id: bay.instance_id,
+      });
+      if (!state.layout?.bays.some((item) => item.instance_id === bay.instance_id)) {
+        state.selectedBayId = null;
+      }
+    }
+
+    async function sendPatch(url, payload) {
+      try {
+        const response = await fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Request failed");
+        }
+        state.layout = data;
+        if (!state.layout.bays.some((bay) => bay.instance_id === state.selectedBayId)) {
+          state.selectedBayId = state.layout.bays[0]?.instance_id ?? null;
+        }
+        renderScene();
+      } catch (error) {
+        elements.message.textContent = error.message;
+      }
+    }
+
+    async function fetchTestcases() {
+      const response = await fetch("/api/v1/testcases");
+      const data = await response.json();
+      elements.caseSelect.replaceChildren();
+      for (const testcase of data.testcases) {
+        const option = document.createElement("option");
+        option.value = testcase.name;
+        option.textContent = testcase.name;
+        elements.caseSelect.append(option);
+      }
+      if (data.testcases.length) {
+        await loadSelectedTestcase();
+      }
+    }
+
+    async function loadSelectedTestcase() {
+      const name = elements.caseSelect.value;
+      if (!name) {
+        return;
+      }
+      const response = await fetch(`/api/v1/testcases/${name}`);
+      const data = await response.json();
+      state.caseData = data;
+      state.layout = null;
+      state.selectedBayId = null;
+      state.previewPositions.clear();
+      state.bayTypeMap = new Map(
+        data.bay_types.map((bayType) => [bayType.id, bayType])
+      );
+      elements.banner.textContent = `Loaded ${name}`;
+      renderScene();
+    }
+
+    async function optimiseLayout() {
+      if (!state.caseData) {
+        return;
+      }
+      setBusy(true, "Optimizing layout...");
+      try {
+        const response = await fetch("/api/v1/optimise", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.caseData),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Optimization failed");
+        }
+        state.layout = data;
+        state.selectedBayId = data.bays[0]?.instance_id ?? null;
+        renderScene();
+      } catch (error) {
+        elements.message.textContent = error.message;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadSession(sid) {
+      try {
+        const caseResp = await fetch(`/api/v1/session/${sid}/case`);
+        if (!caseResp.ok) throw new Error("Session expired or not found");
+        const data = await caseResp.json();
+        state.caseData = data;
+        state.layout = null;
+        state.selectedBayId = null;
+        state.previewPositions.clear();
+        state.bayTypeMap = new Map(data.bay_types.map((bayType) => [bayType.id, bayType]));
+        
+        const layoutResp = await fetch(`/api/v1/layout/${sid}`);
+        if (!layoutResp.ok) throw new Error("Layout expired or not found");
+        const layoutData = await layoutResp.json();
+        state.layout = layoutData;
+        state.selectedBayId = layoutData.bays[0]?.instance_id ?? null;
+        
+        elements.banner.textContent = `Live Editor Session`;
+        renderScene();
+      } catch (error) {
+        elements.message.textContent = error.message;
+      }
+    }
+
+    elements.loadButton.addEventListener("click", loadSelectedTestcase);
+    elements.optimiseButton.addEventListener("click", optimiseLayout);
+    elements.rotateButton.addEventListener("click", rotateSelectedByStep);
+    elements.deleteButton.addEventListener("click", deleteSelected);
+    window.addEventListener("keydown", async (event) => {
+      if (event.key === "Delete" || event.key === "Backspace") {
+        await deleteSelected();
+      }
+      if (event.key.toLowerCase() === "r") {
+        await rotateSelectedByStep();
+      }
+    });
+
+    const sessionId = "{{ session_id|default('') }}";
+    if (sessionId) {
+      // Hide testcase controls
+      elements.caseSelect.parentElement.style.display = "none";
+      loadSession(sessionId);
+    } else {
+      fetchTestcases().catch((error) => {
+        elements.message.textContent = error.message;
+      });
+    }
+  </script>
+</body>
+</html>

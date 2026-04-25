@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Mecalux Smart Optimizer{% endblock %}
+
+{% block content %}
+<section class="home-screen flex min-h-screen items-center justify-center overflow-hidden px-5 py-6">
+  <form id="homeUploadForm" method="post" action="/upload" enctype="multipart/form-data" class="home-panel grid w-full max-w-5xl gap-6 rounded-[28px] border border-blue-100/80 bg-white/88 p-6 shadow-2xl shadow-blue-900/8 backdrop-blur md:grid-cols-[minmax(0,1fr)_220px] md:p-8">
+    <input type="hidden" name="next" value="jobs" />
+
+    <div class="min-w-0">
+      <div class="flex items-center gap-3">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-xl font-black text-[#4C91C6]">M</div>
+        <div>
+          <h1 class="font-display text-2xl font-black tracking-tight text-slate-950 md:text-4xl">Mecalux Smart Optimizer</h1>
+          <p class="mt-1 text-sm font-semibold text-slate-500">Add case files before entering the final layout workspace.</p>
+        </div>
+      </div>
+
+      <div class="mt-7 rounded-3xl border border-blue-100 bg-[#f7fbff] p-5">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-display text-xl font-bold text-slate-950">Add case files</h2>
+          <span class="rounded-full bg-orange-100 px-3 py-1 text-xs font-black uppercase tracking-[.14em] text-orange-700">Required</span>
+        </div>
+
+        <div class="mt-5 grid gap-4">
+          <label class="file-field">
+            <span>Case bundle .zip</span>
+            <input type="file" name="case_zip" accept=".zip" />
+          </label>
+
+          <label class="file-field">
+            <span>JSON layout</span>
+            <input type="file" name="case_json" accept=".json" />
+          </label>
+
+          <div class="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+            <input name="case_name" placeholder="CSV case name" class="rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#4C91C6] focus:ring-4 focus:ring-blue-100" />
+            <div class="grid grid-cols-2 gap-2">
+              <label class="file-field compact"><span>warehouse.csv</span><input type="file" name="warehouse_csv" accept=".csv" /></label>
+              <label class="file-field compact"><span>obstacles.csv</span><input type="file" name="obstacles_csv" accept=".csv" /></label>
+              <label class="file-field compact"><span>ceiling.csv</span><input type="file" name="ceiling_csv" accept=".csv" /></label>
+              <label class="file-field compact"><span>types_of_bays.csv</span><input type="file" name="types_of_bays_csv" accept=".csv" /></label>
+            </div>
+          </div>
+        </div>
+
+        <p id="homeUploadError" class="mt-4 hidden rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-700">Upload a ZIP, JSON, or at least warehouse.csv before entering.</p>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-center md:border-l md:border-blue-100 md:pl-6">
+      <button type="submit" class="enter-button rounded-full bg-[#F4A261] px-7 py-3 text-sm font-black uppercase tracking-[.14em] text-white shadow-lg shadow-orange-300/30 hover:-translate-y-0.5 hover:bg-[#ef9550]">
+        Enter
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById("homeUploadForm")?.addEventListener("submit", (event) => {
+    const form = event.currentTarget;
+    const hasFile = Array.from(form.querySelectorAll('input[type="file"]')).some((input) => input.files && input.files.length > 0);
+    const error = document.getElementById("homeUploadError");
+    if (!hasFile) {
+      event.preventDefault();
+      error?.classList.remove("hidden");
+    } else {
+      error?.classList.add("hidden");
+    }
+  });
+</script>
+{% endblock %}

@@ -1,354 +1,317 @@
-"""
-API routes for the Mecalux Warehouse Optimizer.
+"""FastAPI routes for optimization, live editing, and testcase access."""
 
-Endpoints:
-    GET  /api/v1/health              → Health check
-    POST /api/v1/solve               → Submit 4 CSVs, start optimization job
-    POST /api/v1/solve/json          → Submit JSON input, start optimization job
-    GET  /api/v1/jobs                → List all jobs
-    GET  /api/v1/jobs/{id}           → Get job status
-    GET  /api/v1/jobs/{id}/result    → Get optimization result
-    GET  /api/v1/jobs/{id}/stream    → SSE progress streaming
-    POST /api/v1/jobs/{id}/cancel    → Cancel a running job
-    POST /api/v1/score               → Real-time scoring (sync, fast) ← interactive frontend
-    POST /api/v1/validate            → Validate a placement ← interactive frontend
-    GET  /api/v1/testcases           → List available testcases
-    GET  /api/v1/testcases/{name}    → Load a specific testcase
-"""
-import sys
-import os
+from __future__ import annotations
+
 import asyncio
+import dataclasses
 import json
+import logging
+import os
 import time
-from typing import List
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 from api_models import (
-    Job, JobStatus, SolveResult, PlacedBay,
-    JobCreatedResponse, HealthResponse, OptimizationInput
+    DeleteBayRequest,
+    HealthResponse,
+    Job,
+    JobCreatedResponse,
+    JobStatus,
+    LayoutResponse,
+    MoveBayRequest,
+    OptimizationInput,
+    RotateBayRequest,
+    ScoreRequest,
 )
-from job_store import create_job, get_job, update_job, get_progress_queue, cleanup_queue, list_jobs
+from bridge import solution_to_api, to_case_data
+from api_config import API_VERSION, DEFAULT_SOLVER_TIME_BUDGET_SECONDS
 from csv_parser import parse_all
+from job_store import (
+    cleanup_queue,
+    create_job,
+    get_job,
+    get_progress_queue,
+    list_jobs,
+    update_job,
+)
+from layout_session import StatefulLayoutSession
 from scorer import calculate_score, validate_placement
+from session_store import get_layout_session_store
 
-# Bridge handles backend path setup and model conversion
-from bridge import to_case_data, solution_to_api
 
-# Testcases directory (relative to project root)
+LOGGER = logging.getLogger(__name__)
 TESTCASES_DIR = os.path.join(os.path.dirname(__file__), "..", "testcases")
-
-# Default solver time budget (seconds)
-SOLVER_TIME_BUDGET = 29.0
-
-
 router = APIRouter(prefix="/api/v1")
 
 
-# ─── Health ───────────────────────────────────────────────────────────────────
-
 @router.get("/health", response_model=HealthResponse)
-async def health():
-    return {"status": "ok", "version": "1.0.0"}
+async def health() -> HealthResponse:
+    """Return a basic health payload."""
+
+    return HealthResponse(status="ok", version=API_VERSION)
 
 
-# ─── Solve (create job) ──────────────────────────────────────────────────────
+@router.post("/optimise", response_model=LayoutResponse)
+async def optimise(input_data: OptimizationInput) -> LayoutResponse:
+    """Run the backend solver and open a live editing session."""
 
-@router.post("/solve", status_code=202, response_model=JobCreatedResponse)
-async def solve(
-    bg: BackgroundTasks,
+    case = to_case_data(input_data)
+    solution, stats, elapsed_ms = await _solve_case(case)
+    session = StatefulLayoutSession.from_solution(case, solution)
+    await get_layout_session_store().save(session)
+    _log_optimization(stats, elapsed_ms)
+    return session.snapshot(
+        message="Optimization completed.",
+        solved_in_ms=elapsed_ms,
+    )
+
+
+@router.post("/optimise/files", response_model=LayoutResponse)
+async def optimise_files(
     warehouse: UploadFile = File(...),
     obstacles: UploadFile = File(...),
     ceiling: UploadFile = File(...),
     bay_types: UploadFile = File(...),
-):
-    """
-    Upload 4 CSV files to start an optimization job.
-    Returns immediately with a job_id. Use /jobs/{id}/stream for progress.
-    """
-    # Read CSV contents
-    warehouse_csv = (await warehouse.read()).decode("utf-8")
-    obstacles_csv = (await obstacles.read()).decode("utf-8")
-    ceiling_csv = (await ceiling.read()).decode("utf-8")
-    bay_types_csv = (await bay_types.read()).decode("utf-8")
+) -> LayoutResponse:
+    """Run optimization directly from uploaded CSV files."""
 
-    # Parse CSVs into model objects
+    input_data = await _parse_upload_input(
+        warehouse=warehouse,
+        obstacles=obstacles,
+        ceiling=ceiling,
+        bay_types=bay_types,
+    )
+    return await optimise(input_data)
+
+
+@router.patch("/layout/move", response_model=LayoutResponse)
+async def move_layout(request: MoveBayRequest) -> LayoutResponse:
+    """Move a bay inside an active live-edit session."""
+
+    session = await _require_session(request.session_id)
     try:
-        input_data = parse_all(warehouse_csv, obstacles_csv, ceiling_csv, bay_types_csv)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"CSV parsing error: {str(e)}")
+        return await session.move_bay(
+            bay_id=request.bay_id,
+            x=request.x,
+            y=request.y,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=exc.args[0]) from exc
 
-    # Create job
+
+@router.patch("/layout/rotate", response_model=LayoutResponse)
+async def rotate_layout(request: RotateBayRequest) -> LayoutResponse:
+    """Rotate a bay inside an active live-edit session."""
+
+    session = await _require_session(request.session_id)
+    try:
+        return await session.rotate_bay(
+            bay_id=request.bay_id,
+            rotation=request.rotation,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+
+
+@router.patch("/layout/delete", response_model=LayoutResponse)
+async def delete_layout(request: DeleteBayRequest) -> LayoutResponse:
+    """Delete a bay inside an active live-edit session."""
+
+    session = await _require_session(request.session_id)
+    try:
+        return await session.delete_bay(bay_id=request.bay_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+
+
+@router.get("/layout/{session_id}", response_model=LayoutResponse)
+async def get_layout(session_id: str) -> LayoutResponse:
+    """Return the current layout snapshot for a session."""
+
+    session = await _require_session(session_id)
+    return session.snapshot(message="Layout loaded.")
+
+
+@router.post("/solve", status_code=202, response_model=JobCreatedResponse)
+async def solve(
+    background_tasks: BackgroundTasks,
+    warehouse: UploadFile = File(...),
+    obstacles: UploadFile = File(...),
+    ceiling: UploadFile = File(...),
+    bay_types: UploadFile = File(...),
+) -> JobCreatedResponse:
+    """Submit uploaded CSV files to the legacy background job API."""
+
+    input_data = await _parse_upload_input(
+        warehouse=warehouse,
+        obstacles=obstacles,
+        ceiling=ceiling,
+        bay_types=bay_types,
+    )
     job = Job(input_data=input_data)
     create_job(job)
-
-    # Run optimizer in background
-    bg.add_task(_run_optimizer, job.id, input_data)
-
+    background_tasks.add_task(_run_optimizer, job.id, input_data)
     return JobCreatedResponse(job_id=job.id, status=job.status)
 
 
-# Also support JSON input (for flexibility / testing)
 @router.post("/solve/json", status_code=202, response_model=JobCreatedResponse)
 async def solve_json(
-    bg: BackgroundTasks,
+    background_tasks: BackgroundTasks,
     input_data: OptimizationInput,
-):
-    """
-    Submit optimization input as JSON. Alternative to CSV upload.
-    """
+) -> JobCreatedResponse:
+    """Submit JSON input to the legacy background job API."""
+
     job = Job(input_data=input_data)
     create_job(job)
-    bg.add_task(_run_optimizer, job.id, input_data)
+    background_tasks.add_task(_run_optimizer, job.id, input_data)
     return JobCreatedResponse(job_id=job.id, status=job.status)
 
 
-# ─── Jobs ─────────────────────────────────────────────────────────────────────
-
 @router.get("/jobs")
-async def get_all_jobs():
-    """List all jobs, most recent first."""
-    jobs = list_jobs()
+async def get_all_jobs() -> list[dict[str, object]]:
+    """List background jobs, newest first."""
+
     return [
         {
-            "id": j.id,
-            "status": j.status,
-            "progress": j.progress,
-            "message": j.message,
-            "created_at": j.created_at.isoformat(),
+            "id": job.id,
+            "status": job.status,
+            "progress": job.progress,
+            "message": job.message,
+            "created_at": job.created_at.isoformat(),
         }
-        for j in jobs
+        for job in list_jobs()
     ]
 
 
 @router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str):
-    """Get full job details."""
+async def get_job_status(job_id: str) -> Job:
+    """Return the full background-job record."""
+
     job = get_job(job_id)
-    if not job:
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
 @router.get("/jobs/{job_id}/result")
-async def get_job_result(job_id: str):
-    """Get the optimization result (only available when COMPLETED)."""
+async def get_job_result(job_id: str) -> dict[str, object]:
+    """Return the completed result for a background job."""
+
     job = get_job(job_id)
-    if not job:
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != JobStatus.COMPLETED:
+    if job.status != JobStatus.COMPLETED or job.result is None:
         raise HTTPException(
             status_code=409,
-            detail=f"Job is {job.status.value}, not COMPLETED"
+            detail=f"Job is {job.status.value}, not COMPLETED",
         )
-    return job.result
+    return job.result.model_dump()
 
 
 @router.post("/jobs/{job_id}/cancel")
-async def cancel_job(job_id: str):
-    """Cancel a running or queued job."""
+async def cancel_job(job_id: str) -> dict[str, str]:
+    """Cancel a queued or running background job."""
+
     job = get_job(job_id)
-    if not job:
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
-        raise HTTPException(status_code=409, detail="Cannot cancel a finished job")
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot cancel a finished job",
+        )
     update_job(job_id, status=JobStatus.CANCELED)
     queue = get_progress_queue(job_id)
     await queue.put({"event": "job_canceled", "job_id": job_id})
-    return {"status": "CANCELED"}
+    return {"status": JobStatus.CANCELED.value}
 
-
-# ─── SSE Streaming ───────────────────────────────────────────────────────────
 
 @router.get("/jobs/{job_id}/stream")
-async def stream_job(job_id: str):
-    """
-    Server-Sent Events stream for real-time job progress.
+async def stream_job(job_id: str) -> StreamingResponse:
+    """Stream background-job progress through Server-Sent Events."""
 
-    Events emitted:
-        job_queued, job_started, job_progress, job_completed, job_failed
-    """
     job = get_job(job_id)
-    if not job:
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # If job is already done, send the final event immediately
-    if job.status == JobStatus.COMPLETED:
-        async def done_generator():
-            result_data = job.result.model_dump() if job.result else {}
-            yield f"data: {json.dumps({'event': 'job_completed', 'job_id': job_id, 'result': result_data})}\n\n"
+    if job.status == JobStatus.COMPLETED and job.result is not None:
+        payload = {
+            "event": "job_completed",
+            "job_id": job_id,
+            "result": job.result.model_dump(),
+        }
+
+        async def completed_stream() -> object:
+            yield f"data: {json.dumps(payload)}\n\n"
+
         return StreamingResponse(
-            done_generator(),
+            completed_stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     if job.status == JobStatus.FAILED:
-        async def error_generator():
-            yield f"data: {json.dumps({'event': 'job_failed', 'job_id': job_id, 'error': job.error or 'Unknown error'})}\n\n"
+        payload = {
+            "event": "job_failed",
+            "job_id": job_id,
+            "error": job.error or "Unknown error",
+        }
+
+        async def failed_stream() -> object:
+            yield f"data: {json.dumps(payload)}\n\n"
+
         return StreamingResponse(
-            error_generator(),
+            failed_stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    # Stream progress events
     queue = get_progress_queue(job_id)
 
-    async def event_generator():
+    async def event_generator() -> object:
         while True:
             try:
-                msg = await asyncio.wait_for(queue.get(), timeout=30.0)
-                yield f"data: {json.dumps(msg)}\n\n"
-                if msg.get("event") in ("job_completed", "job_failed", "job_canceled"):
-                    break
+                message = await asyncio.wait_for(queue.get(), timeout=30.0)
             except asyncio.TimeoutError:
-                # Keep connection alive with a ping
                 yield f"data: {json.dumps({'event': 'ping'})}\n\n"
+                continue
+            yield f"data: {json.dumps(message)}\n\n"
+            if message.get("event") in {
+                "job_completed",
+                "job_failed",
+                "job_canceled",
+            }:
+                break
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 
 
-# ─── Background optimizer runner ──────────────────────────────────────────────
-
-async def _run_optimizer(job_id: str, input_data: OptimizationInput):
-    """
-    Run the real HybridSolver in a background thread and stream progress.
-
-    Uses timer-based progress updates since the solver doesn't support
-    callbacks. We know the time_budget, so we can estimate progress.
-    """
-    queue = get_progress_queue(job_id)
-    await queue.put({"event": "job_started", "job_id": job_id})
-    update_job(job_id, status=JobStatus.RUNNING, progress=0)
-
-    # Convert API models → backend CaseData
-    case = to_case_data(input_data)
-
-    # Event loop reference for timer-based progress
-    loop = asyncio.get_running_loop()
-
-    # Timer-based progress emitter
-    progress_task = None
-    cancel_progress = asyncio.Event()
-
-    async def emit_progress():
-        """Emit smooth progress updates based on time budget."""
-        start = time.monotonic()
-        while not cancel_progress.is_set():
-            elapsed = time.monotonic() - start
-            # Progress follows a logarithmic curve: fast at start, slows down
-            # Cap at 95% — the final 100% comes from the actual completion
-            pct = min(95, int((elapsed / SOLVER_TIME_BUDGET) * 100))
-            update_job(job_id, progress=pct, message=f"Solving... ({pct}%)")
-            await queue.put({
-                "event": "job_progress",
-                "job_id": job_id,
-                "percent": pct,
-                "message": f"Solving... ({pct}%)",
-            })
-            try:
-                await asyncio.wait_for(cancel_progress.wait(), timeout=1.0)
-                break
-            except asyncio.TimeoutError:
-                pass
-
-    try:
-        # Start progress emitter
-        progress_task = asyncio.create_task(emit_progress())
-
-        # Import and run the real solver in a thread
-        from solver.hybrid import HybridSolver
-
-        def run_solver():
-            solver = HybridSolver(time_budget=SOLVER_TIME_BUDGET)
-            return solver.solve(case)
-
-        start_time = time.monotonic()
-        solution = await asyncio.to_thread(run_solver)
-        elapsed_ms = int((time.monotonic() - start_time) * 1000)
-
-        # Stop progress emitter
-        cancel_progress.set()
-        if progress_task:
-            await progress_task
-
-        # Convert result
-        result = solution_to_api(solution, case, elapsed_ms)
-
-        update_job(job_id, status=JobStatus.COMPLETED, progress=100, result=result)
-        await queue.put({
-            "event": "job_completed",
-            "job_id": job_id,
-            "result": result.model_dump(),
-        })
-
-    except Exception as e:
-        # Stop progress emitter on error
-        cancel_progress.set()
-        if progress_task:
-            await progress_task
-
-        error_msg = str(e)[:500]
-        update_job(job_id, status=JobStatus.FAILED, error=error_msg)
-        await queue.put({
-            "event": "job_failed",
-            "job_id": job_id,
-            "error": error_msg,
-        })
-
-    finally:
-        # Clean up queue after a delay (let SSE consumers finish reading)
-        await asyncio.sleep(5)
-        cleanup_queue(job_id)
-
-
-# ─── Interactive Scoring (SYNCHRONOUS — optimized for real-time) ──────────────
-
-class ScoreRequest(BaseModel):
-    """Request body for the /score endpoint. Sent by the interactive frontend."""
-    placed_bays: List[dict]   # [{id, x, y, rotation}, ...]
-    bay_types: List[dict]     # [{id, width, depth, height, gap, nLoads, price}, ...]
-    warehouse: List[dict]     # [{x, y}, ...]
-    obstacles: List[dict] = []
-    ceiling: List[dict] = []
-
-
 @router.post("/score")
-async def score(request: ScoreRequest):
-    """
-    Calculate the Q score and validate a placement.
-    SYNCHRONOUS — returns immediately. Designed for real-time interactive use.
+async def score(request: ScoreRequest) -> dict[str, object]:
+    """Legacy synchronous score endpoint used by older clients."""
 
-    The frontend calls this every time the user modifies a bay position,
-    providing instant feedback on the score and any constraint violations.
-    """
-    result = calculate_score(
+    return calculate_score(
         placed_bays=request.placed_bays,
         bay_types=request.bay_types,
         warehouse=request.warehouse,
         obstacles=request.obstacles,
         ceiling=request.ceiling,
     )
-    return result
 
 
 @router.post("/validate")
-async def validate(request: ScoreRequest):
-    """
-    Validate a bay placement against all constraints.
-    Returns a list of issues (empty list = valid placement).
-    """
+async def validate(request: ScoreRequest) -> dict[str, object]:
+    """Legacy synchronous validation endpoint used by older clients."""
+
     issues = validate_placement(
         placed_bays=request.placed_bays,
         bay_types=request.bay_types,
@@ -356,62 +319,270 @@ async def validate(request: ScoreRequest):
         obstacles=request.obstacles,
         ceiling=request.ceiling,
     )
-    return {
-        "is_valid": len(issues) == 0,
-        "issues": issues,
-    }
+    return {"is_valid": len(issues) == 0, "issues": issues}
 
-
-# ─── Testcases ────────────────────────────────────────────────────────────────
 
 @router.get("/testcases")
-async def list_testcases():
-    """List available testcases from the testcases/ directory."""
+async def list_testcases() -> dict[str, list[dict[str, str]]]:
+    """List available testcase folders."""
+
     if not os.path.isdir(TESTCASES_DIR):
         return {"testcases": []}
 
-    cases = []
+    cases: list[dict[str, str]] = []
     for entry in sorted(os.listdir(TESTCASES_DIR)):
         case_dir = os.path.join(TESTCASES_DIR, entry)
-        if os.path.isdir(case_dir):
-            # Check it has the required CSV files
-            has_files = all(
-                os.path.exists(os.path.join(case_dir, f))
-                for f in ["warehouse.csv", "obstacles.csv", "ceiling.csv", "types_of_bays.csv"]
-            )
-            if has_files:
-                cases.append({"name": entry, "path": case_dir})
-
+        if not os.path.isdir(case_dir):
+            continue
+        required_files = {
+            "warehouse.csv",
+            "obstacles.csv",
+            "ceiling.csv",
+            "types_of_bays.csv",
+        }
+        if all(os.path.exists(os.path.join(case_dir, name))
+               for name in required_files):
+            cases.append({"name": entry, "path": case_dir})
     return {"testcases": cases}
 
 
 @router.get("/testcases/{name}")
-async def load_testcase(name: str):
-    """
-    Load a testcase by name. Returns the parsed warehouse data as JSON.
-    The frontend can use this to render the warehouse and bay types.
-    """
+async def load_testcase(name: str) -> OptimizationInput:
+    """Load a testcase from ``testcases/<name>``."""
+
     case_dir = os.path.join(TESTCASES_DIR, name)
     if not os.path.isdir(case_dir):
-        raise HTTPException(status_code=404, detail=f"Testcase '{name}' not found")
-
-    required_files = ["warehouse.csv", "obstacles.csv", "ceiling.csv", "types_of_bays.csv"]
-    csvs = {}
-    for fname in required_files:
-        fpath = os.path.join(case_dir, fname)
-        if not os.path.exists(fpath):
-            raise HTTPException(status_code=404, detail=f"Missing file: {fname}")
-        with open(fpath, "r") as f:
-            csvs[fname.replace(".csv", "").replace("types_of_bays", "bay_types")] = f.read()
+        raise HTTPException(
+            status_code=404,
+            detail=f"Testcase '{name}' not found",
+        )
 
     try:
-        input_data = parse_all(
-            csvs["warehouse"],
-            csvs["obstacles"],
-            csvs["ceiling"],
-            csvs["bay_types"],
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"CSV parsing error: {str(e)}")
+        with open(os.path.join(case_dir, "warehouse.csv"), encoding="utf-8") as fh:
+            warehouse_csv = fh.read()
+        with open(os.path.join(case_dir, "obstacles.csv"), encoding="utf-8") as fh:
+            obstacles_csv = fh.read()
+        with open(os.path.join(case_dir, "ceiling.csv"), encoding="utf-8") as fh:
+            ceiling_csv = fh.read()
+        with open(
+            os.path.join(case_dir, "types_of_bays.csv"),
+            encoding="utf-8",
+        ) as fh:
+            bay_types_csv = fh.read()
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return input_data
+    return parse_all(
+        warehouse_csv=warehouse_csv,
+        obstacles_csv=obstacles_csv,
+        ceiling_csv=ceiling_csv,
+        bay_types_csv=bay_types_csv,
+    )
+
+
+async def _parse_upload_input(
+    warehouse: UploadFile,
+    obstacles: UploadFile,
+    ceiling: UploadFile,
+    bay_types: UploadFile,
+) -> OptimizationInput:
+    """Parse uploaded CSV files into ``OptimizationInput``."""
+
+    try:
+        warehouse_csv = (await warehouse.read()).decode("utf-8")
+        obstacles_csv = (await obstacles.read()).decode("utf-8")
+        ceiling_csv = (await ceiling.read()).decode("utf-8")
+        bay_types_csv = (await bay_types.read()).decode("utf-8")
+        return parse_all(
+            warehouse_csv=warehouse_csv,
+            obstacles_csv=obstacles_csv,
+            ceiling_csv=ceiling_csv,
+            bay_types_csv=bay_types_csv,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV parsing error: {exc}",
+        ) from exc
+
+
+async def _require_session(session_id: str) -> StatefulLayoutSession:
+    """Fetch a live layout session or raise ``404``."""
+
+    session = await get_layout_session_store().get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+
+@router.get("/session/{session_id}/case")
+async def get_session_case(session_id: str) -> dict:
+    """Fetch the original case data of an interactive layout session."""
+    session = await _require_session(session_id)
+    case = session.case
+    # CaseData is a stdlib dataclass, not Pydantic, so convert manually
+    return _case_data_to_dict(case)
+
+
+async def _solve_case(case) -> tuple[object, object, int]:
+    """Solve a case in the executor and return solution, stats, and time."""
+
+    loop = asyncio.get_running_loop()
+
+    def run_solver() -> tuple[object, object]:
+        from solver.hybrid import HybridSolver
+
+        solver = HybridSolver(
+            time_budget=DEFAULT_SOLVER_TIME_BUDGET_SECONDS,
+        )
+        solution = solver.solve(case)
+        return solution, solver.last_run_stats
+
+    started_at = time.perf_counter()
+    solution, stats = await loop.run_in_executor(None, run_solver)
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000.0)
+    return solution, stats, elapsed_ms
+
+
+def _log_optimization(stats: object, elapsed_ms: int) -> None:
+    """Log a completed optimization run."""
+
+    LOGGER.info(
+        (
+            "optimization_completed duration_ms=%s q_initial=%s q_final=%s "
+            "bay_count=%s strategy=%s exact_attempted=%s exact_completed=%s "
+            "nodes=%s"
+        ),
+        elapsed_ms,
+        getattr(stats, "q_initial", None),
+        getattr(stats, "q_final", None),
+        getattr(stats, "bay_count", None),
+        getattr(stats, "strategy", None),
+        getattr(stats, "exact_search_attempted", None),
+        getattr(stats, "exact_search_completed", None),
+        getattr(stats, "nodes_explored", None),
+    )
+
+
+async def _run_optimizer(job_id: str, input_data: OptimizationInput) -> None:
+    """Execute the legacy background optimization job."""
+
+    queue = get_progress_queue(job_id)
+    await queue.put({"event": "job_started", "job_id": job_id})
+    update_job(job_id, status=JobStatus.RUNNING, progress=0)
+
+    case = to_case_data(input_data)
+    cancel_progress = asyncio.Event()
+
+    async def emit_progress() -> None:
+        start = time.monotonic()
+        while not cancel_progress.is_set():
+            elapsed = time.monotonic() - start
+            percent = min(
+                95,
+                int(
+                    (elapsed / DEFAULT_SOLVER_TIME_BUDGET_SECONDS)
+                    * 100.0
+                ),
+            )
+            update_job(
+                job_id,
+                progress=percent,
+                message=f"Solving... ({percent}%)",
+            )
+            await queue.put(
+                {
+                    "event": "job_progress",
+                    "job_id": job_id,
+                    "percent": percent,
+                    "message": f"Solving... ({percent}%)",
+                }
+            )
+            try:
+                await asyncio.wait_for(cancel_progress.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+
+    progress_task = asyncio.create_task(emit_progress())
+    try:
+        solution, stats, elapsed_ms = await _solve_case(case)
+        cancel_progress.set()
+        await progress_task
+        _log_optimization(stats, elapsed_ms)
+        
+        # Save session so editor can pick it up
+        from layout_session import StatefulLayoutSession
+        session = StatefulLayoutSession.from_solution(case, solution, session_id=job_id)
+        from session_store import get_layout_session_store
+        await get_layout_session_store().save(session)
+        
+        result = solution_to_api(solution, case, elapsed_ms)
+        update_job(
+            job_id,
+            status=JobStatus.COMPLETED,
+            progress=100,
+            result=result,
+        )
+        await queue.put(
+            {
+                "event": "job_completed",
+                "job_id": job_id,
+                "result": result.model_dump(),
+            }
+        )
+    except Exception as exc:
+        cancel_progress.set()
+        await progress_task
+        error_message = str(exc)[:500]
+        update_job(job_id, status=JobStatus.FAILED, error=error_message)
+        await queue.put(
+            {
+                "event": "job_failed",
+                "job_id": job_id,
+                "error": error_message,
+            }
+        )
+    finally:
+        await asyncio.sleep(5.0)
+        cleanup_queue(job_id)
+
+
+def _case_data_to_dict(case) -> dict:
+    """Convert a backend CaseData dataclass into an API-compatible dict.
+
+    CaseData uses stdlib dataclasses with nested objects (Warehouse, Point,
+    etc.) which don't support Pydantic's ``model_dump()``.  We rebuild the
+    dict in the shape that ``OptimizationInput`` expects so the frontend
+    can consume it directly.
+    """
+
+    return {
+        "warehouse": [
+            {"x": v.x, "y": v.y} for v in case.warehouse.vertices
+        ],
+        "obstacles": [
+            {
+                "x": obs.x,
+                "y": obs.y,
+                "width": obs.width,
+                "depth": obs.depth,
+            }
+            for obs in case.obstacles
+        ],
+        "ceiling": [
+            {"x": bp[0], "height": bp[1]}
+            for bp in case.ceiling.breakpoints
+        ],
+        "bay_types": [
+            {
+                "id": bt.id,
+                "width": bt.width,
+                "depth": bt.depth,
+                "height": bt.height,
+                "gap": bt.gap,
+                "nLoads": bt.n_loads,
+                "price": bt.price,
+            }
+            for bt in case.bay_types
+        ],
+    }
