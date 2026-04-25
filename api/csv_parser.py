@@ -4,7 +4,7 @@ CSV parser for Mecalux warehouse challenge input files.
 Parses the 4 CSV files (warehouse, obstacles, ceiling, types_of_bays)
 into OptimizationInput model objects.
 """
-from models import (
+from api_models import (
     WallPoint, Obstacle, CeilingPoint, BayType, OptimizationInput
 )
 

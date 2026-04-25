@@ -2,10 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies from both api and backend
+COPY api/requirements.txt ./api/
+COPY backend/requirements.txt ./backend/
+RUN pip install --no-cache-dir -r api/requirements.txt -r backend/requirements.txt
 
-COPY . .
+# Copy source code
+COPY api/ ./api/
+COPY backend/ ./backend/
+COPY testcases/ ./testcases/
+
+WORKDIR /app/api
 
 EXPOSE 8000
 
