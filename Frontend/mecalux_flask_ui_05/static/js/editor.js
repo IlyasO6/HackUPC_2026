@@ -30,14 +30,11 @@ function warehouseEditor(initialLayout, projectId) {
       return this.bayTypes.find((bay) => String(bay.id) === String(this.selectedBayTypeId)) || this.bayTypes[0] || null;
     },
 
-<<<<<<< HEAD
-=======
     get gapSliderMax() {
       const currentGap = this.selectedShelf ? this.shelfGap(this.selectedShelf) : 0;
       return Math.max(1000, Math.ceil((currentGap + 250) / 100) * 100);
     },
 
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     get polygon() {
       if (this.warehouse.polygon && this.warehouse.polygon.length >= 3) {
         return this.warehouse.polygon;
@@ -59,13 +56,7 @@ function warehouseEditor(initialLayout, projectId) {
         points.push({ x: Number(o.x || 0) + Number(o.w || o.width || 0), y: Number(o.y || 0) + Number(o.h || o.depth || 0) });
       });
       this.shelves.forEach((s) => {
-<<<<<<< HEAD
-        const footprint = this.shelfFootprintSize(s);
-        points.push({ x: Number(s.x || 0), y: Number(s.y || 0) });
-        points.push({ x: Number(s.x || 0) + footprint.w, y: Number(s.y || 0) + footprint.h });
-=======
         this.rectCorners(s).forEach((corner) => points.push(corner));
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
       });
 
       const xs = points.map((p) => Number(p.x || 0));
@@ -86,24 +77,6 @@ function warehouseEditor(initialLayout, projectId) {
     },
 
     toScreenX(x) {
-<<<<<<< HEAD
-      const b = this.bounds;
-      return b.offsetX + (Number(x || 0) - b.minX) * b.scale;
-    },
-
-    toScreenY(y) {
-      const b = this.bounds;
-      return b.offsetY + (Number(y || 0) - b.minY) * b.scale;
-    },
-
-    toWorldX(x) {
-      const b = this.bounds;
-      return (Number(x || 0) - b.offsetX) / b.scale + b.minX;
-    },
-
-    toWorldY(y) {
-      const b = this.bounds;
-=======
       return this.screenX(x, this.bounds);
     },
 
@@ -132,7 +105,6 @@ function warehouseEditor(initialLayout, projectId) {
     },
 
     worldY(y, b) {
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
       return (Number(y || 0) - b.offsetY) / b.scale + b.minY;
     },
 
@@ -142,16 +114,6 @@ function warehouseEditor(initialLayout, projectId) {
     },
 
     warehousePolygonPoints() {
-<<<<<<< HEAD
-      return this.polygon.map((p) => `${this.toScreenX(p.x)},${this.toScreenY(p.y)}`).join(" ");
-    },
-
-    rectStyle(item) {
-      const x = this.toScreenX(item.x);
-      const y = this.toScreenY(item.y);
-      const w = Number(item.w || item.width || 0) * this.bounds.scale;
-      const h = Number(item.h || item.depth || 0) * this.bounds.scale;
-=======
       const b = this.bounds;
       return this.polygon.map((p) => `${this.screenX(p.x, b)},${this.screenY(p.y, b)}`).join(" ");
     },
@@ -162,39 +124,25 @@ function warehouseEditor(initialLayout, projectId) {
       const y = this.screenY(item.y, b);
       const w = Number(item.w || item.width || 0) * b.scale;
       const h = Number(item.h || item.depth || 0) * b.scale;
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
       const rotation = Number(item.rotation || 0);
       const transform = rotation ? ` transform: rotate(${rotation}deg); transform-origin: center center;` : "";
       return `left:${x}px; top:${y}px; width:${w}px; height:${h}px;${transform}`;
     },
 
     shelfStyle(shelf) {
-<<<<<<< HEAD
-      const x = this.toScreenX(shelf.x);
-      const y = this.toScreenY(shelf.y);
-      const footprint = this.shelfFootprintSize(shelf);
-      const rackDepth = this.itemSize(shelf).h * this.bounds.scale;
-      const gapDepth = this.shelfGap(shelf) * this.bounds.scale;
-=======
       const b = this.bounds;
       const x = this.screenX(shelf.x, b);
       const y = this.screenY(shelf.y, b);
       const footprint = this.shelfFootprintSize(shelf);
       const rackDepth = this.itemSize(shelf).h * b.scale;
       const gapDepth = this.shelfGap(shelf) * b.scale;
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
       const rotation = Number(shelf.rotation || 0);
       const transform = rotation ? ` transform: rotate(${rotation}deg); transform-origin: center center;` : "";
       return [
         `left:${x}px`,
         `top:${y}px`,
-<<<<<<< HEAD
-        `width:${footprint.w * this.bounds.scale}px`,
-        `height:${footprint.h * this.bounds.scale}px`,
-=======
         `width:${footprint.w * b.scale}px`,
         `height:${footprint.h * b.scale}px`,
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
         `--rack-depth:${rackDepth}px`,
         `--gap-depth:${gapDepth}px`,
         transform,
@@ -208,13 +156,6 @@ function warehouseEditor(initialLayout, projectId) {
       return (price / loads).toFixed(2);
     },
 
-<<<<<<< HEAD
-    bayTypePreviewStyle(bay) {
-      const w = Math.max(1, Number(bay.width || 1));
-      const h = Math.max(1, Number(bay.depth || bay.height || 1));
-      const scale = Math.min(76 / w, 44 / h);
-      return `width:${Math.max(10, w * scale)}px; height:${Math.max(8, h * scale)}px;`;
-=======
     bayTypePreviewScale(bay) {
       const w = Math.max(1, Number(bay.width || 1));
       const h = Math.max(1, Number(bay.depth || bay.height || 1));
@@ -242,7 +183,6 @@ function warehouseEditor(initialLayout, projectId) {
     bayRackPreviewStyle(bay) {
       const h = Math.max(1, Number(bay.depth || bay.height || 1));
       return `height:${Math.max(6, h * this.bayTypePreviewScale(bay))}px;`;
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     },
 
 
@@ -257,10 +197,6 @@ function warehouseEditor(initialLayout, projectId) {
       };
     },
 
-<<<<<<< HEAD
-    shelfGap(shelf) {
-      return Math.max(0, Number(shelf.gap || 0));
-=======
     bayGap(bay) {
       return Math.max(0, Number(bay.gap || 0));
     },
@@ -271,7 +207,6 @@ function warehouseEditor(initialLayout, projectId) {
 
     gapLabelVisible(shelf) {
       return this.shelfGap(shelf) * this.bounds.scale > 18;
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     },
 
     shelfFootprintSize(shelf) {
@@ -445,8 +380,6 @@ function warehouseEditor(initialLayout, projectId) {
       this.saveError = null;
     },
 
-<<<<<<< HEAD
-=======
     setSelectedGap(value) {
       const shelf = this.selectedShelf;
       if (!shelf) return;
@@ -466,7 +399,6 @@ function warehouseEditor(initialLayout, projectId) {
       this.saveError = null;
     },
 
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     defaultShelfSize() {
       const bay = this.selectedBayType;
       if (bay) {
@@ -555,14 +487,9 @@ function warehouseEditor(initialLayout, projectId) {
       const scaleY = CANVAS_H / canvasRect.height;
       const mouseX = (event.clientX - canvasRect.left) * scaleX;
       const mouseY = (event.clientY - canvasRect.top) * scaleY;
-<<<<<<< HEAD
-      this.dragOffsetX = mouseX - this.toScreenX(shelf.x);
-      this.dragOffsetY = mouseY - this.toScreenY(shelf.y);
-=======
       const b = this.bounds;
       this.dragOffsetX = mouseX - this.screenX(shelf.x, b);
       this.dragOffsetY = mouseY - this.screenY(shelf.y, b);
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     },
 
     dragShelf(event) {
@@ -577,14 +504,9 @@ function warehouseEditor(initialLayout, projectId) {
       const mouseX = (event.clientX - canvasRect.left) * scaleX;
       const mouseY = (event.clientY - canvasRect.top) * scaleY;
 
-<<<<<<< HEAD
-      let newX = this.toWorldX(mouseX - this.dragOffsetX);
-      let newY = this.toWorldY(mouseY - this.dragOffsetY);
-=======
       const b = this.bounds;
       let newX = this.worldX(mouseX - this.dragOffsetX, b);
       let newY = this.worldY(mouseY - this.dragOffsetY, b);
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
 
       const footprint = this.shelfFootprintSize(shelf);
       newX = Math.max(this.bounds.minX, Math.min(newX, this.bounds.maxX - footprint.w));

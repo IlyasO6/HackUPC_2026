@@ -7,14 +7,9 @@ from mock_api.case_parser import parse_csv_case, parse_json_case, parse_zip_case
 from services import api_client
 from websocket_mock.progress import run_fake_job
 
-<<<<<<< HEAD
-app = Flask(__name__) 
-app.config["SECRET_KEY"] = "hackupc-mecalux-dev"
-=======
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "hackupc-mecalux-dev"
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 
@@ -76,6 +71,9 @@ def upload_case():
         created.append(api_client.import_project(parsed_name, layout, status="uploaded csv"))
 
     if created:
+        destination = request.form.get("next")
+        if destination == "jobs":
+            return redirect(url_for("optimization_page", project_id=created[0]["id"]))
         return redirect(url_for("editor", project_id=created[0]["id"]))
 
     return redirect(url_for("dashboard"))

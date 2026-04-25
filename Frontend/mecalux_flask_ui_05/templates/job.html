@@ -1,111 +1,186 @@
 {% extends "base.html" %}
-{% block title %}Optimization Job · Mecalux{% endblock %}
+{% block title %}Final Layout - Mecalux{% endblock %}
 
 {% block content %}
-<<<<<<< HEAD
-<div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="grid gap-6 lg:grid-cols-[380px_1fr]">
-  <aside class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-=======
-<div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="editor-shell grid gap-6 px-5 py-6 md:px-8 lg:grid-cols-[380px_minmax(0,1fr)]">
-  <aside class="editor-sidebar rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
-    <a href="{{ url_for('editor', project_id=project_id) }}" class="text-sm text-blue-200 hover:text-blue-100">← Back to editor</a>
-    <h1 class="mt-4 text-3xl font-black">Optimization Job</h1>
-    <p class="mt-2 text-sm text-slate-400">Fake WebSocket progress. Later this connects to the real backend.</p>
+<div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="px-5 py-6 md:px-8">
+  <a href="{{ url_for('dashboard') }}" class="home-button fixed right-5 top-4 z-[60] rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-[#0066B3] shadow-lg shadow-slate-900/10 hover:-translate-y-0.5 hover:bg-blue-50 md:right-8">Home</a>
 
-    <button @click="runJob" :disabled="running" class="mt-6 w-full rounded-2xl bg-blue-500 px-4 py-3 font-bold hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50">
-      <span x-show="!running">Run optimization</span>
-      <span x-show="running">Optimization running...</span>
-    </button>
-
-    <div class="mt-6">
-      <div class="mb-2 flex justify-between text-sm">
-        <span>Status: <b x-text="status"></b></span>
-        <span x-text="`${progress}%`"></span>
+  <div class="final-layout-shell grid gap-5">
+    <aside class="layout-tools rounded-3xl border border-blue-100 bg-white/86 p-4 shadow-xl shadow-blue-900/5 backdrop-blur">
+      <div class="flex items-center justify-between gap-3">
+        <a href="{{ url_for('editor', project_id=project_id) }}" class="text-sm font-black text-[#4C91C6] hover:text-[#2f6f9f]">Back</a>
+        <span class="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black text-[#4C91C6]" x-text="status"></span>
       </div>
-      <div class="h-4 overflow-hidden rounded-full bg-slate-800">
-        <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-300" :style="`width: ${progress}%`"></div>
+
+      <button @click="runJob" :disabled="running" class="mt-4 w-full rounded-2xl bg-blue-500 px-4 py-3 font-bold hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50">
+        <span x-show="!running">Run optimization</span>
+        <span x-show="running">Optimizing...</span>
+      </button>
+
+      <div class="mt-4">
+        <div class="mb-2 flex justify-between text-xs font-bold text-slate-400">
+          <span>Progress</span>
+          <span x-text="`${progress}%`"></span>
+        </div>
+        <div class="h-3 overflow-hidden rounded-full bg-slate-800">
+          <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-300" :style="`width: ${progress}%`"></div>
+        </div>
       </div>
-    </div>
 
-    <div x-show="result" x-transition class="mt-6 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-      <h2 class="font-bold text-emerald-100">Final result</h2>
-      <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
-        <div class="rounded-2xl bg-slate-950/50 p-3"><dt class="text-slate-400">Score Q</dt><dd class="text-xl font-black" x-text="result?.score"></dd></div>
-        <div class="rounded-2xl bg-slate-950/50 p-3"><dt class="text-slate-400">Coverage</dt><dd class="text-xl font-black" x-text="`${Math.round((result?.coverage || 0) * 100)}%`"></dd></div>
-        <div class="col-span-2 rounded-2xl bg-slate-950/50 p-3"><dt class="text-slate-400">Bays placed</dt><dd class="text-xl font-black" x-text="result?.baysPlaced"></dd></div>
-      </dl>
-    </div>
-  </aside>
-
-  <section class="space-y-6">
-    <div class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-      <h2 class="text-xl font-bold">Streaming logs</h2>
-      <div class="mt-4 h-72 overflow-auto rounded-2xl bg-black/60 p-4 font-mono text-sm text-emerald-200">
-        <template x-for="log in logs" :key="log">
-          <p><span class="text-slate-500">›</span> <span x-text="log"></span></p>
-        </template>
-        <p x-show="logs.length === 0" class="text-slate-500">No logs yet. Press run optimization.</p>
+      <div class="mt-5 grid grid-cols-3 gap-2">
+        <button @click="setTool('select')" class="tool-chip" :class="activeTool === 'select' ? 'is-active' : ''">Select</button>
+        <button @click="setTool('move')" class="tool-chip" :class="activeTool === 'move' ? 'is-active' : ''">Move</button>
+        <button @click="setTool('delete')" class="tool-chip danger" :class="activeTool === 'delete' ? 'is-active' : ''">Delete</button>
       </div>
-    </div>
 
-    <div class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-      <h2 class="text-xl font-bold">Final layout visualization</h2>
-      <p class="mt-1 text-sm text-slate-400">Draws the backend-style result: bay id, x, y, rotation. Coordinates are auto-scaled, including negative cases.</p>
+      <div x-show="placementWarning" x-transition class="mt-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-3 text-sm font-bold text-amber-100" x-text="placementWarning"></div>
 
-      <div class="relative mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-inner" style="height:650px; max-width:1000px; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px); background-size: 25px 25px;">
-        <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 650" preserveAspectRatio="none">
-          <polygon :points="warehousePolygonPoints()" fill="rgba(15, 23, 42, .55)" stroke="rgba(125, 211, 252, .85)" stroke-width="3"></polygon>
-        </svg>
+      <div class="mt-5 border-t border-blue-100 pt-4">
+        <div class="flex items-center justify-between gap-3">
+          <label class="text-xs font-black uppercase tracking-[.18em] text-[#4C91C6]">Add furniture</label>
+          <span class="text-xs font-bold text-slate-500" x-text="`${resultBays.length} placed`"></span>
+        </div>
+        <select x-model="selectedBayTypeId" class="mt-2 w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300">
+          <template x-for="bay in bayTypes" :key="bay.id">
+            <option :value="bay.id" x-text="`Type ${bay.id} - ${bay.width} x ${bay.depth}`"></option>
+          </template>
+        </select>
+        <button @click="addShelf" class="mt-3 w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-black text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50" :disabled="bayTypes.length === 0">Add selected</button>
+      </div>
 
-        <template x-for="obs in obstacles" :key="obs.id">
-          <div class="absolute rounded-xl border border-red-300/40 bg-red-500/60" :style="rectStyle(obs)">
-            <span class="p-2 text-xs font-bold">Obstacle</span>
+      <div class="mt-5 border-t border-blue-100 pt-4">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="font-bold">Selected furniture</h3>
+          <button @click="removeSelectedBay" :disabled="!selectedBay" class="trash-icon-button rounded-xl px-3 py-1.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-40">Remove</button>
+        </div>
+
+        <div x-show="selectedBay" class="mt-3 space-y-4 text-sm text-slate-300">
+          <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <b class="truncate" x-text="selectedBay?.id"></b>
+              <span class="rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] font-bold text-blue-100" x-text="selectedBay?.bayTypeId || '-'"></span>
+            </div>
+            <p class="mt-1 text-xs text-slate-500" x-text="selectedFootprintLabel"></p>
           </div>
-        </template>
 
-        <template x-for="(bay, index) in resultBays" :key="`${bay.id}-${index}`">
-<<<<<<< HEAD
-          <div class="absolute rounded-xl border border-emerald-200/40 bg-emerald-500/80 shadow-lg" :style="bayStyle(bay)">
-            <span class="block p-2 text-xs font-black" x-text="bay.id"></span>
-            <span class="absolute bottom-1 right-2 text-[10px] opacity-80" x-text="`${bay.rotation || 0}°`"></span>
-=======
-          <div class="shelf-placement result-bay absolute overflow-hidden rounded-xl border shadow-lg" :style="bayStyle(bay)">
-            <span x-show="bayGap(bay) > 0" class="shelf-gap-zone" :title="`${bayGap(bay)} mm gap`"></span>
-            <span class="shelf-rack-body relative block">
-              <span class="rack-depth-line rack-depth-left"></span>
-              <span class="rack-depth-line rack-depth-right"></span>
-              <span class="rack-rail rack-rail-top"></span>
-              <span class="rack-rail rack-rail-bottom"></span>
-              <span class="rack-post rack-post-top-left"></span>
-              <span class="rack-post rack-post-top-right"></span>
-              <span class="rack-post rack-post-bottom-left"></span>
-              <span class="rack-post rack-post-bottom-right"></span>
-              <span class="rack-label" x-text="bay.id"></span>
-              <span class="rack-rotation" x-text="`${bay.rotation || 0}°`"></span>
-            </span>
->>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
+          <div class="grid grid-cols-2 gap-2">
+            <label class="space-y-1">
+              <span class="text-xs text-slate-500">X</span>
+              <input type="number" :value="selectedBay?.x || 0" @change="setSelectedPosition('x', $event.target.value)" class="w-full rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-right font-bold outline-none focus:border-blue-300">
+            </label>
+            <label class="space-y-1">
+              <span class="text-xs text-slate-500">Y</span>
+              <input type="number" :value="selectedBay?.y || 0" @change="setSelectedPosition('y', $event.target.value)" class="w-full rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-right font-bold outline-none focus:border-blue-300">
+            </label>
           </div>
-        </template>
 
-        <div x-show="!result" class="absolute inset-0 flex items-center justify-center text-slate-500">Run optimization to show the mocked backend result.</div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-[.18em] text-orange-600">Angle</label>
+            <div class="mt-2 grid grid-cols-[1fr_72px] items-center gap-3">
+              <input type="range" min="0" max="359" step="1" :value="selectedBay?.rotation || 0" @input="setSelectedRotation($event.target.value)" class="angle-slider min-w-0 flex-1">
+              <input type="number" min="0" max="359" step="1" :value="selectedBay?.rotation || 0" @change="setSelectedRotation($event.target.value)" class="rounded-xl border border-orange-100 bg-white px-2 py-1.5 text-right text-sm font-bold text-orange-700 outline-none focus:border-orange-300">
+            </div>
+            <div class="mt-2 grid grid-cols-4 gap-2">
+              <template x-for="angle in [0, 90, 180, 270]" :key="angle">
+                <button @click="setSelectedRotation(angle)" class="tool-chip" x-text="angle"></button>
+              </template>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <button @click="rotateSelectedBy(-15)" class="tool-chip">-15 deg</button>
+              <button @click="rotateSelectedBy(15)" class="tool-chip">+15 deg</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-black uppercase tracking-[.18em] text-[#4C91C6]">Move</label>
+            <div class="mt-2 grid grid-cols-3 gap-2">
+              <span></span>
+              <button @click="nudgeSelected(0, -1)" class="tool-chip">Up</button>
+              <span></span>
+              <button @click="nudgeSelected(-1, 0)" class="tool-chip">Left</button>
+              <button @click="nudgeSelected(0, 1)" class="tool-chip">Down</button>
+              <button @click="nudgeSelected(1, 0)" class="tool-chip">Right</button>
+            </div>
+          </div>
+        </div>
+
+        <p x-show="!selectedBay" class="mt-3 text-sm text-slate-500">Run optimization and select a furniture block to edit it.</p>
       </div>
-    </div>
 
-    <div class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-      <h2 class="text-xl font-bold">Mock heatmap</h2>
-      <p class="mt-1 text-sm text-slate-400">Visual demo of final optimization output. Values are mocked.</p>
-
-      <div class="mt-5 grid max-w-3xl gap-2" :style="`grid-template-columns: repeat(${heatmapCols}, minmax(0, 1fr))`">
-        <template x-for="(cell, index) in heatmapCells" :key="index">
-          <div class="flex aspect-square items-center justify-center rounded-2xl border border-white/10 text-xs font-bold" :style="heatStyle(cell)" x-text="Math.round(cell * 100)"></div>
-        </template>
+      <div class="mt-5 border-t border-blue-100 pt-4">
+        <h3 class="font-bold">Furniture list</h3>
+        <div class="mt-3 max-h-52 space-y-2 overflow-auto pr-1">
+          <template x-for="bay in resultBays" :key="bay.uid">
+            <button @click="selectBay(bay)" class="shelf-row w-full rounded-2xl p-2 text-left transition" :class="selectedBayUid === bay.uid ? 'is-selected' : ''">
+              <div class="flex items-center justify-between gap-2">
+                <b class="truncate" x-text="bay.id"></b>
+                <span class="text-xs text-slate-400" x-text="`${bay.rotation || 0} deg`"></span>
+              </div>
+              <p class="truncate text-xs text-slate-500">x:<span x-text="bay.x"></span> y:<span x-text="bay.y"></span></p>
+            </button>
+          </template>
+        </div>
       </div>
-    </div>
-  </section>
+    </aside>
+
+    <section class="min-w-0 rounded-3xl border border-blue-100 bg-white/80 p-4 shadow-xl shadow-blue-900/5 backdrop-blur">
+      <div
+        x-ref="finalCanvas"
+        @mousemove="dragBay"
+        @mouseup="stopBayDrag"
+        @mouseleave="stopBayDrag"
+        class="final-canvas relative overflow-hidden rounded-3xl border border-blue-100 bg-[#f8fcff] shadow-inner"
+        style="height:calc(100vh - 152px); min-height:620px;"
+      >
+        <div class="final-canvas-layer" :style="canvasLayerStyle()">
+          <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 650" preserveAspectRatio="none">
+            <defs>
+              <pattern id="layoutGrid" width="25" height="25" patternUnits="userSpaceOnUse">
+                <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#b9dcf2" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect width="1000" height="650" fill="url(#layoutGrid)"></rect>
+            <polygon :points="warehousePolygonPoints()" fill="rgba(241, 248, 253, .72)" stroke="rgba(76, 145, 198, .9)" stroke-width="3"></polygon>
+          </svg>
+
+          <template x-for="obs in obstacles" :key="obs.id">
+            <div class="layout-obstacle absolute rounded-xl border" :style="rectStyle(obs)">
+              <span class="p-2 text-xs font-bold">Obstacle</span>
+            </div>
+          </template>
+
+          <template x-for="bay in resultBays" :key="bay.uid">
+            <button
+              @mousedown.prevent="handleBayPointerDown($event, bay)"
+              class="shelf-placement result-bay absolute overflow-hidden rounded-xl border text-left shadow-lg"
+              :class="selectedBayUid === bay.uid ? 'is-selected' : 'is-default'"
+              :style="bayStyle(bay)"
+              :title="`Furniture ${bay.id}`"
+            >
+              <span x-show="bayGap(bay) > 0" class="shelf-gap-zone" :title="`${bayGap(bay)} mm gap`"></span>
+              <span class="shelf-rack-body relative block">
+                <span class="rack-depth-line rack-depth-left"></span>
+                <span class="rack-depth-line rack-depth-right"></span>
+                <span class="rack-rail rack-rail-top"></span>
+                <span class="rack-rail rack-rail-bottom"></span>
+                <span class="rack-post rack-post-top-left"></span>
+                <span class="rack-post rack-post-top-right"></span>
+                <span class="rack-post rack-post-bottom-left"></span>
+                <span class="rack-post rack-post-bottom-right"></span>
+                <span class="rack-label" x-text="bay.id"></span>
+                <span class="rack-rotation" x-text="`${bay.rotation || 0} deg`"></span>
+              </span>
+            </button>
+          </template>
+        </div>
+
+        <div x-show="!result" class="absolute inset-0 flex items-center justify-center text-slate-500">Run optimization to show the final layout.</div>
+      </div>
+    </section>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/job.js') }}"></script>
+<script src="{{ url_for('static', filename='js/job.js', v='layout-5') }}"></script>
 {% endblock %}
