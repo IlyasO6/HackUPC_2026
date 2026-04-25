@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+ 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 from flask_socketio import SocketIO, join_room
 
