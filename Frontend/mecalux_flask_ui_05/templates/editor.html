@@ -2,8 +2,13 @@
 {% block title %}Warehouse Editor · Mecalux{% endblock %}
 
 {% block content %}
+<<<<<<< HEAD
 <div x-data='warehouseEditor({{ layout | tojson }}, "{{ project_id }}")' class="grid gap-6 lg:grid-cols-[360px_1fr]">
   <aside class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+=======
+<div x-data='warehouseEditor({{ layout | tojson }}, "{{ project_id }}")' class="editor-shell grid gap-6 px-5 py-6 md:px-8 lg:grid-cols-[360px_minmax(0,1fr)]">
+  <aside class="editor-sidebar rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     <a href="{{ url_for('dashboard') }}" class="text-sm text-blue-200 hover:text-blue-100">← Back to dashboard</a>
     <h1 class="mt-4 text-3xl font-black">Warehouse Editor</h1>
     <p class="mt-2 text-sm text-slate-400">Interactive mock editor. Choose bay types, drag shelves and set custom angles before sending the layout payload.</p>
@@ -36,7 +41,11 @@
       <div x-show="selectedShelf" class="mt-3 text-sm text-slate-300">
         <p><b x-text="selectedShelf?.label"></b> · <span x-text="selectedShelf?.rotation || 0"></span>°</p>
         <p>x:<span x-text="selectedShelf?.x"></span> y:<span x-text="selectedShelf?.y"></span></p>
+<<<<<<< HEAD
         <p>w:<span x-text="selectedShelf?.w"></span> h:<span x-text="selectedShelf?.h"></span></p>
+=======
+        <p>w:<span x-text="selectedShelf?.w"></span> h:<span x-text="selectedShelf?.h"></span> gap:<span x-text="selectedShelf?.gap || 0"></span></p>
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
 
         <label class="mt-4 block text-xs font-bold uppercase tracking-[.2em] text-blue-200">Angle</label>
         <div class="mt-2 flex items-center gap-3">
@@ -58,6 +67,34 @@
         </div>
       </div>
       <p x-show="!selectedShelf" class="mt-3 text-sm text-slate-500">Click or drag a shelf to select it.</p>
+<<<<<<< HEAD
+=======
+      <div x-show="selectedShelf" class="mt-4 border-t border-white/10 pt-4 text-sm text-slate-300">
+        <label class="block text-xs font-bold uppercase tracking-[.2em] text-orange-200">Gap clearance</label>
+        <div class="mt-2 grid grid-cols-[1fr_92px] items-center gap-3">
+          <input
+            type="range"
+            min="0"
+            :max="gapSliderMax"
+            step="25"
+            :value="selectedShelf?.gap || 0"
+            @input="setSelectedGap($event.target.value)"
+            class="gap-slider"
+          >
+          <input
+            type="number"
+            min="0"
+            step="25"
+            :value="selectedShelf?.gap || 0"
+            @change="setSelectedGap($event.target.value)"
+            class="rounded-xl border border-white/10 bg-slate-900 px-2 py-1 text-right font-bold text-orange-200 outline-none focus:border-orange-300"
+          >
+        </div>
+        <p class="mt-2 text-xs text-slate-500">
+          Footprint depth: <span x-text="Number(selectedShelf?.h || 0) + shelfGap(selectedShelf || {})"></span> mm
+        </p>
+      </div>
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     </div>
 
     <div class="mt-6">
@@ -75,7 +112,14 @@
           >
             <div class="flex items-center gap-3">
               <div class="grid h-16 w-24 place-items-center rounded-xl border border-blue-200/30 bg-slate-950/60">
+<<<<<<< HEAD
                 <div class="rounded-md border border-orange-200/60 bg-orange-400/70 shadow" :style="bayTypePreviewStyle(bay)"></div>
+=======
+                <div class="bay-footprint-preview" :style="bayFootprintPreviewStyle(bay)">
+                  <span x-show="bayGap(bay) > 0" class="bay-preview-gap" :style="bayGapPreviewStyle(bay)"></span>
+                  <span class="bay-preview-rack" :style="bayRackPreviewStyle(bay)"></span>
+                </div>
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
@@ -129,7 +173,11 @@
     </div>
   </aside>
 
+<<<<<<< HEAD
   <section class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+=======
+  <section class="editor-stage rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     <div class="mb-4 flex items-center justify-between">
       <div>
         <h2 class="text-xl font-bold">Canvas grid</h2>
@@ -176,7 +224,11 @@
         <button
           @mousedown.prevent="startDrag($event, shelf)"
           class="shelf-placement absolute cursor-grab overflow-hidden rounded-xl border text-left shadow-lg transition hover:scale-[1.02] active:cursor-grabbing"
+<<<<<<< HEAD
           :class="selectedShelfId === shelf.id ? 'border-yellow-300 bg-yellow-500/80 ring-4 ring-yellow-300/30' : 'border-blue-200/40 bg-blue-500/80'"
+=======
+          :class="selectedShelfId === shelf.id ? 'is-selected' : 'is-default'"
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
           :style="shelfStyle(shelf)"
         >
           <span
@@ -184,10 +236,25 @@
             class="shelf-gap-zone"
             :title="`${shelfGap(shelf)} mm gap`"
           >
+<<<<<<< HEAD
             <span x-show="shelfGap(shelf) * bounds.scale > 18" class="shelf-gap-label">gap</span>
           </span>
           <span class="shelf-rack-body relative block">
             <span class="block p-2 text-xs font-black" x-text="shelf.label"></span>
+=======
+            <span x-show="gapLabelVisible(shelf)" class="shelf-gap-label">gap</span>
+          </span>
+          <span class="shelf-rack-body relative block">
+            <span class="rack-depth-line rack-depth-left"></span>
+            <span class="rack-depth-line rack-depth-right"></span>
+            <span class="rack-rail rack-rail-top"></span>
+            <span class="rack-rail rack-rail-bottom"></span>
+            <span class="rack-post rack-post-top-left"></span>
+            <span class="rack-post rack-post-top-right"></span>
+            <span class="rack-post rack-post-bottom-left"></span>
+            <span class="rack-post rack-post-bottom-right"></span>
+            <span class="rack-label" x-text="shelf.label"></span>
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
             <span class="absolute bottom-1 right-2 text-[10px] opacity-80" x-text="`${shelf.rotation || 0}°`"></span>
           </span>
         </button>

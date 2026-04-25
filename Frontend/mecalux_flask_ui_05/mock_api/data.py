@@ -27,9 +27,15 @@ LAYOUTS: dict[str, dict[str, Any]] = {
             "source": "Built-in demo",
         },
         "shelves": [
+<<<<<<< HEAD
             {"id": "shelf-1", "x": 800, "y": 800, "w": 1400, "h": 600, "rotation": 0, "label": "A"},
             {"id": "shelf-2", "x": 2600, "y": 800, "w": 1800, "h": 700, "rotation": 0, "label": "B"},
             {"id": "shelf-3", "x": 800, "y": 2000, "w": 800, "h": 1200, "rotation": 90, "label": "C"},
+=======
+            {"id": "shelf-1", "x": 800, "y": 800, "w": 1400, "h": 600, "gap": 220, "rotation": 0, "label": "A", "bayTypeId": "A"},
+            {"id": "shelf-2", "x": 2600, "y": 800, "w": 1800, "h": 700, "gap": 260, "rotation": 0, "label": "B", "bayTypeId": "B"},
+            {"id": "shelf-3", "x": 800, "y": 2300, "w": 800, "h": 1200, "gap": 180, "rotation": 90, "label": "C", "bayTypeId": "C"},
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
         ],
         "obstacles": [
             {"id": "obs-1", "x": 5200, "y": 2300, "w": 900, "h": 1100},
@@ -37,8 +43,14 @@ LAYOUTS: dict[str, dict[str, Any]] = {
         ],
         "ceiling": [],
         "bayTypes": [
+<<<<<<< HEAD
             {"id": "A", "width": 1400, "depth": 600, "height": 2500, "gap": 0, "nLoads": 20, "price": 1000},
             {"id": "B", "width": 1800, "depth": 700, "height": 2800, "gap": 0, "nLoads": 35, "price": 1800},
+=======
+            {"id": "A", "width": 1400, "depth": 600, "height": 2500, "gap": 220, "nLoads": 20, "price": 1000},
+            {"id": "B", "width": 1800, "depth": 700, "height": 2800, "gap": 260, "nLoads": 35, "price": 1800},
+            {"id": "C", "width": 800, "depth": 1200, "height": 2400, "gap": 180, "nLoads": 12, "price": 900},
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
         ],
     }
 }
@@ -65,6 +77,11 @@ def build_mock_result(project_id: str) -> dict[str, Any]:
                 "y": shelf.get("y", 0),
                 "w": shelf.get("w"),
                 "h": shelf.get("h"),
+<<<<<<< HEAD
+=======
+                "gap": shelf.get("gap", 0),
+                "bayTypeId": shelf.get("bayTypeId"),
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
                 "rotation": shelf.get("rotation", 0),
             }
             for shelf in shelves
@@ -84,6 +101,11 @@ def build_mock_result(project_id: str) -> dict[str, Any]:
                 "y": min_y + (i // 4) * (h + 250),
                 "w": w,
                 "h": h,
+<<<<<<< HEAD
+=======
+                "gap": default_type.get("gap", 0),
+                "bayTypeId": default_type.get("id", "A"),
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
                 "rotation": 0,
             })
 

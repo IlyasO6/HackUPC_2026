@@ -212,4 +212,7 @@ If backend work continues, the best next step is:
 2. let refinement rebuild a small cluster of rows instead of only one row at a time
 3. explicitly score non-cardinal angle candidates in residual pockets against cardinal fillers on the same local region
 4. keep using the current shared validation/rule engine as the single source of truth
+<<<<<<< HEAD
  
+=======
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421

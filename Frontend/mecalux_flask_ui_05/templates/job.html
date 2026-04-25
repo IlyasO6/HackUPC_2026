@@ -2,8 +2,13 @@
 {% block title %}Optimization Job · Mecalux{% endblock %}
 
 {% block content %}
+<<<<<<< HEAD
 <div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="grid gap-6 lg:grid-cols-[380px_1fr]">
   <aside class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+=======
+<div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="editor-shell grid gap-6 px-5 py-6 md:px-8 lg:grid-cols-[380px_minmax(0,1fr)]">
+  <aside class="editor-sidebar rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
     <a href="{{ url_for('editor', project_id=project_id) }}" class="text-sm text-blue-200 hover:text-blue-100">← Back to editor</a>
     <h1 class="mt-4 text-3xl font-black">Optimization Job</h1>
     <p class="mt-2 text-sm text-slate-400">Fake WebSocket progress. Later this connects to the real backend.</p>
@@ -60,9 +65,26 @@
         </template>
 
         <template x-for="(bay, index) in resultBays" :key="`${bay.id}-${index}`">
+<<<<<<< HEAD
           <div class="absolute rounded-xl border border-emerald-200/40 bg-emerald-500/80 shadow-lg" :style="bayStyle(bay)">
             <span class="block p-2 text-xs font-black" x-text="bay.id"></span>
             <span class="absolute bottom-1 right-2 text-[10px] opacity-80" x-text="`${bay.rotation || 0}°`"></span>
+=======
+          <div class="shelf-placement result-bay absolute overflow-hidden rounded-xl border shadow-lg" :style="bayStyle(bay)">
+            <span x-show="bayGap(bay) > 0" class="shelf-gap-zone" :title="`${bayGap(bay)} mm gap`"></span>
+            <span class="shelf-rack-body relative block">
+              <span class="rack-depth-line rack-depth-left"></span>
+              <span class="rack-depth-line rack-depth-right"></span>
+              <span class="rack-rail rack-rail-top"></span>
+              <span class="rack-rail rack-rail-bottom"></span>
+              <span class="rack-post rack-post-top-left"></span>
+              <span class="rack-post rack-post-top-right"></span>
+              <span class="rack-post rack-post-bottom-left"></span>
+              <span class="rack-post rack-post-bottom-right"></span>
+              <span class="rack-label" x-text="bay.id"></span>
+              <span class="rack-rotation" x-text="`${bay.rotation || 0}°`"></span>
+            </span>
+>>>>>>> f22f6c81c239d38dcba436717fd21d1c308b4421
           </div>
         </template>
 
