@@ -7,8 +7,9 @@ from mock_api.case_parser import parse_csv_case, parse_json_case, parse_zip_case
 from services import api_client
 from websocket_mock.progress import run_fake_job
 
-app = Flask(__name__) 
+app = Flask(__name__)
 app.config["SECRET_KEY"] = "hackupc-mecalux-dev"
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 
