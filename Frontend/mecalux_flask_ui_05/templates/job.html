@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Optimization Job · Mecalux{% endblock %}
+
+{% block content %}
+<div x-data='jobMonitor("{{ project_id }}", {{ layout | tojson }})' class="grid gap-6 lg:grid-cols-[380px_1fr]">
+  <aside class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+    <a href="{{ url_for('editor', project_id=project_id) }}" class="text-sm text-blue-200 hover:text-blue-100">← Back to editor</a>
+    <h1 class="mt-4 text-3xl font-black">Optimization Job</h1>
+    <p class="mt-2 text-sm text-slate-400">Fake WebSocket progress. Later this connects to the real backend.</p>
+
+    <button @click="runJob" :disabled="running" class="mt-6 w-full rounded-2xl bg-blue-500 px-4 py-3 font-bold hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50">
+      <span x-show="!running">Run optimization</span>
+      <span x-show="running">Optimization running...</span>
+    </button>
+
+    <div class="mt-6">
+      <div class="mb-2 flex justify-between text-sm">
+        <span>Status: <b x-text="status"></b></span>
+        <span x-text="`${progress}%`"></span>
+      </div>
+      <div class="h-4 overflow-hidden rounded-full bg-slate-800">
+        <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-300" :style="`width: ${progress}%`"></div>
+      </div>
+    </div>
+
+    <div x-show="result" x-transition class="mt-6 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-4">
+      <h2 class="font-bold text-emerald-100">Final result</h2>
+      <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
+        <div class="rounded-2xl bg-slate-950/50 p-3"><dt class="text-slate-400">Score Q</dt><dd class="text-xl font-black" x-text="result?.score"></dd></div>
+        <div class="rounded-2xl bg-slate-950/50 p-3"><dt class="text-slate-400">Coverage</dt><dd class="text-xl font-black" x-text="`${Math.round((result?.coverage || 0) * 100)}%`"></dd></div>
+        <div class="col-span-2 rounded-2xl bg-slate-950/50 p-3"><dt class="text-slate-400">Bays placed</dt><dd class="text-xl font-black" x-text="result?.baysPlaced"></dd></div>
+      </dl>
+    </div>
+  </aside>
+
+  <section class="space-y-6">
+    <div class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+      <h2 class="text-xl font-bold">Streaming logs</h2>
+      <div class="mt-4 h-72 overflow-auto rounded-2xl bg-black/60 p-4 font-mono text-sm text-emerald-200">
+        <template x-for="log in logs" :key="log">
+          <p><span class="text-slate-500">›</span> <span x-text="log"></span></p>
+        </template>
+        <p x-show="logs.length === 0" class="text-slate-500">No logs yet. Press run optimization.</p>
+      </div>
+    </div>
+
+    <div class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+      <h2 class="text-xl font-bold">Final layout visualization</h2>
+      <p class="mt-1 text-sm text-slate-400">Draws the backend-style result: bay id, x, y, rotation. Coordinates are auto-scaled, including negative cases.</p>
+
+      <div class="relative mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-inner" style="height:650px; max-width:1000px; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px); background-size: 25px 25px;">
+        <svg class="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 650" preserveAspectRatio="none">
+          <polygon :points="warehousePolygonPoints()" fill="rgba(15, 23, 42, .55)" stroke="rgba(125, 211, 252, .85)" stroke-width="3"></polygon>
+        </svg>
+
+        <template x-for="obs in obstacles" :key="obs.id">
+          <div class="absolute rounded-xl border border-red-300/40 bg-red-500/60" :style="rectStyle(obs)">
+            <span class="p-2 text-xs font-bold">Obstacle</span>
+          </div>
+        </template>
+
+        <template x-for="(bay, index) in resultBays" :key="`${bay.id}-${index}`">
+          <div class="absolute rounded-xl border border-emerald-200/40 bg-emerald-500/80 shadow-lg" :style="bayStyle(bay)">
+            <span class="block p-2 text-xs font-black" x-text="bay.id"></span>
+            <span class="absolute bottom-1 right-2 text-[10px] opacity-80" x-text="`${bay.rotation || 0}°`"></span>
+          </div>
+        </template>
+
+        <div x-show="!result" class="absolute inset-0 flex items-center justify-center text-slate-500">Run optimization to show the mocked backend result.</div>
+      </div>
+    </div>
+
+    <div class="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
+      <h2 class="text-xl font-bold">Mock heatmap</h2>
+      <p class="mt-1 text-sm text-slate-400">Visual demo of final optimization output. Values are mocked.</p>
+
+      <div class="mt-5 grid max-w-3xl gap-2" :style="`grid-template-columns: repeat(${heatmapCols}, minmax(0, 1fr))`">
+        <template x-for="(cell, index) in heatmapCells" :key="index">
+          <div class="flex aspect-square items-center justify-center rounded-2xl border border-white/10 text-xs font-bold" :style="heatStyle(cell)" x-text="Math.round(cell * 100)"></div>
+        </template>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/job.js') }}"></script>
+{% endblock %}

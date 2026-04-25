@@ -1,0 +1,109 @@
+{
+  "case": "../testcases/Case0",
+  "solver": "HybridSolver",
+  "score": 1448.1179791850507,
+  "valid": true,
+  "violations": [],
+  "elapsed_seconds": 27.5975,
+  "num_bays": 14,
+  "coverage": 0.693333,
+  "total_area": 35360000,
+  "warehouse_area": 51000000.0,
+  "total_price": 37000,
+  "total_loads": 141,
+  "type_counts": {
+    "2": 7,
+    "5": 6,
+    "3": 1
+  },
+  "rotation_counts": {
+    "90.0": 8,
+    "0.0": 6
+  },
+  "placements": [
+    {
+      "id": 2,
+      "x": 7200.0,
+      "y": 0.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 2,
+      "x": 1200.0,
+      "y": 1500.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 2,
+      "x": 2400.0,
+      "y": 1500.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 2,
+      "x": 1200.0,
+      "y": 4200.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 2,
+      "x": 1200.0,
+      "y": 7200.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 2,
+      "x": 7200.0,
+      "y": 0.0,
+      "rotation": 0.0
+    },
+    {
+      "id": 2,
+      "x": 7200.0,
+      "y": 1200.0,
+      "rotation": 0.0
+    },
+    {
+      "id": 5,
+      "x": 1500.0,
+      "y": 0.0,
+      "rotation": 0.0
+    },
+    {
+      "id": 5,
+      "x": 2400.0,
+      "y": 1000.0,
+      "rotation": 0.0
+    },
+    {
+      "id": 5,
+      "x": 2400.0,
+      "y": 2000.0,
+      "rotation": 0.0
+    },
+    {
+      "id": 5,
+      "x": 6000.0,
+      "y": 0.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 5,
+      "x": 2900.0,
+      "y": 4200.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 5,
+      "x": 2900.0,
+      "y": 7200.0,
+      "rotation": 90.0
+    },
+    {
+      "id": 3,
+      "x": 4050.0,
+      "y": 0.0,
+      "rotation": 0.0
+    }
+  ]
+}
