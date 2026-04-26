@@ -277,6 +277,7 @@
   </style>
 </head>
 <body>
+  <a href="/" style="position:fixed;top:18px;left:18px;z-index:100;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:14px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);text-decoration:none;color:var(--ink);font-size:1.2rem;cursor:pointer;transition:transform 120ms ease" title="Back to Home" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">⌂</a>
   <main class="shell">
     <aside class="panel sidebar">
       <section class="headline">
@@ -437,7 +438,7 @@
     function updateMetrics() {
       const layout = state.layout;
       const selected = currentSelectedBay();
-      elements.metricQ.textContent = layout?.Q == null ? "-" : fmtNumber(layout.Q, 6);
+      elements.metricQ.textContent = layout?.Q == null ? "-" : Number(layout.Q).toFixed(2);
       elements.metricBays.textContent = String(layout?.bay_count ?? 0);
       elements.metricLoads.textContent = String(layout?.total_loads ?? 0);
       elements.metricArea.textContent = `Area ${fmtNumber(layout?.total_bay_area ?? 0, 0)}`;
