@@ -1,55 +1,77 @@
 {% extends "base.html" %}
-{% block title %}Mecalux Smart Optimizer{% endblock %}
+{% block title %}Mecalux Layout Optimizer{% endblock %}
 
 {% block content %}
 <section class="home-screen flex min-h-screen items-center justify-center overflow-hidden px-5 py-6">
-  <form id="homeUploadForm" method="post" action="/upload" enctype="multipart/form-data" class="home-panel grid w-full max-w-5xl gap-6 rounded-[28px] border border-blue-100/80 bg-white/88 p-6 shadow-2xl shadow-blue-900/8 backdrop-blur md:grid-cols-[minmax(0,1fr)_220px] md:p-8">
+  <form id="homeUploadForm" method="post" action="/upload" enctype="multipart/form-data"
+        class="home-panel grid w-full max-w-3xl gap-8 rounded-[32px] border border-[#23263a] bg-[#181b28]/90 p-8 shadow-2xl backdrop-blur-xl md:p-10">
     <input type="hidden" name="next" value="jobs" />
 
-    <div class="min-w-0">
-      <div class="flex items-center gap-3">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-xl font-black text-[#4C91C6]">M</div>
-        <div>
-          <h1 class="font-display text-2xl font-black tracking-tight text-slate-950 md:text-4xl">Mecalux Smart Optimizer</h1>
-          <p class="mt-1 text-sm font-semibold text-slate-500">Add case files before entering the final layout workspace.</p>
-        </div>
-      </div>
-
-      <div class="mt-7 rounded-3xl border border-blue-100 bg-[#f7fbff] p-5">
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="font-display text-xl font-bold text-slate-950">Add case files</h2>
-          <span class="rounded-full bg-orange-100 px-3 py-1 text-xs font-black uppercase tracking-[.14em] text-orange-700">Required</span>
-        </div>
-
-        <div class="mt-5 grid gap-4">
-          <label class="file-field">
-            <span>Case bundle .zip</span>
-            <input type="file" name="case_zip" accept=".zip" />
-          </label>
-
-          <label class="file-field">
-            <span>JSON layout</span>
-            <input type="file" name="case_json" accept=".json" />
-          </label>
-
-          <div class="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-            <input name="case_name" placeholder="CSV case name" class="rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#4C91C6] focus:ring-4 focus:ring-blue-100" />
-            <div class="grid grid-cols-2 gap-2">
-              <label class="file-field compact"><span>warehouse.csv</span><input type="file" name="warehouse_csv" accept=".csv" /></label>
-              <label class="file-field compact"><span>obstacles.csv</span><input type="file" name="obstacles_csv" accept=".csv" /></label>
-              <label class="file-field compact"><span>ceiling.csv</span><input type="file" name="ceiling_csv" accept=".csv" /></label>
-              <label class="file-field compact"><span>types_of_bays.csv</span><input type="file" name="types_of_bays_csv" accept=".csv" /></label>
-            </div>
-          </div>
-        </div>
-
-        <p id="homeUploadError" class="mt-4 hidden rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-700">Upload a ZIP, JSON, or at least warehouse.csv before entering.</p>
-      </div>
+    <!-- Header -->
+    <div>
+      <h1 class="font-display text-3xl font-black tracking-tight text-white md:text-4xl">
+        Mecalux Layout Optimizer
+      </h1>
+      <p class="mt-2 text-sm font-medium text-[#8b8fa3]">
+        Add the respective files before continuing to the layout workspace
+      </p>
     </div>
 
-    <div class="flex items-center justify-center md:border-l md:border-blue-100 md:pl-6">
-      <button type="submit" class="enter-button rounded-full bg-[#F4A261] px-7 py-3 text-sm font-black uppercase tracking-[.14em] text-white shadow-lg shadow-orange-300/30 hover:-translate-y-0.5 hover:bg-[#ef9550]">
-        Enter
+    <!-- File inputs card -->
+    <div class="rounded-2xl border border-[#2a2d3e] bg-[#13152080] p-6">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-lg font-bold text-white">Add files</h2>
+        <span class="rounded-full bg-amber-500/15 px-3 py-1 text-[11px] font-black uppercase tracking-[.14em] text-amber-400">Required</span>
+      </div>
+
+      <!-- Individual file inputs -->
+      <div class="mt-5 grid gap-3 sm:grid-cols-2">
+        <label class="file-field dark-field" id="field-warehouse">
+          <span>Warehouse file (.csv)</span>
+          <input type="file" name="warehouse_csv" accept=".csv" />
+          <span class="file-status" data-for="warehouse_csv">No file</span>
+        </label>
+        <label class="file-field dark-field" id="field-obstacles">
+          <span>Obstacles file (.csv)</span>
+          <input type="file" name="obstacles_csv" accept=".csv" />
+          <span class="file-status" data-for="obstacles_csv">No file</span>
+        </label>
+        <label class="file-field dark-field" id="field-ceiling">
+          <span>Ceiling file (.csv)</span>
+          <input type="file" name="ceiling_csv" accept=".csv" />
+          <span class="file-status" data-for="ceiling_csv">No file</span>
+        </label>
+        <label class="file-field dark-field" id="field-types">
+          <span>Bay types file (.csv)</span>
+          <input type="file" name="types_of_bays_csv" accept=".csv" />
+          <span class="file-status" data-for="types_of_bays_csv">No file</span>
+        </label>
+      </div>
+
+      <!-- Drop zone -->
+      <div id="drop-zone" class="mt-5 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#2e3148] bg-[#0f111a]/60 p-8 transition-all hover:border-amber-500/40 hover:bg-[#0f111a]/80">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8b8fa3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p class="text-sm font-semibold text-[#8b8fa3]">Drag &amp; drop your files here</p>
+        <p class="text-xs text-[#555872]">Files are auto-detected by name</p>
+      </div>
+
+      <!-- Error message -->
+      <p id="homeUploadError" class="mt-4 hidden rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-400"></p>
+
+      <!-- File counter -->
+      <p id="file-counter" class="mt-3 text-center text-xs font-bold text-[#555872]">0 / 4 files ready</p>
+    </div>
+
+    <!-- Submit button -->
+    <div class="flex justify-center">
+      <button type="submit" id="start-button"
+              class="enter-button rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-10 py-3.5 text-sm font-black uppercase tracking-[.18em] text-white shadow-lg shadow-amber-500/20 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-amber-500/30 disabled:opacity-40 disabled:pointer-events-none"
+              disabled>
+        START
       </button>
     </div>
   </form>
@@ -58,16 +80,140 @@
 
 {% block scripts %}
 <script>
-  document.getElementById("homeUploadForm")?.addEventListener("submit", (event) => {
-    const form = event.currentTarget;
-    const hasFile = Array.from(form.querySelectorAll('input[type="file"]')).some((input) => input.files && input.files.length > 0);
-    const error = document.getElementById("homeUploadError");
-    if (!hasFile) {
-      event.preventDefault();
-      error?.classList.remove("hidden");
+(function () {
+  const FILE_MAP = {
+    warehouse: "warehouse_csv",
+    obstacles: "obstacles_csv",
+    ceiling: "ceiling_csv",
+    types_of_bays: "types_of_bays_csv",
+  };
+  const REQUIRED = ["warehouse_csv", "obstacles_csv", "ceiling_csv", "types_of_bays_csv"];
+
+  const form = document.getElementById("homeUploadForm");
+  const error = document.getElementById("homeUploadError");
+  const counter = document.getElementById("file-counter");
+  const startBtn = document.getElementById("start-button");
+  const dropZone = document.getElementById("drop-zone");
+
+  function detectSlot(filename) {
+    const lower = filename.toLowerCase();
+    for (const [key, inputName] of Object.entries(FILE_MAP)) {
+      if (lower.includes(key)) return inputName;
+    }
+    return null;
+  }
+
+  function assignFile(file, inputName) {
+    const input = form.querySelector(`input[name="${inputName}"]`);
+    if (!input) return false;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    const status = input.closest("label").querySelector(".file-status");
+    if (status) {
+      status.textContent = file.name;
+      status.classList.add("text-emerald-400");
+      status.classList.remove("text-[#555872]");
+    }
+    input.closest("label").classList.add("has-file");
+    refreshState();
+    return true;
+  }
+
+  function countReady() {
+    return REQUIRED.filter((name) => {
+      const input = form.querySelector(`input[name="${name}"]`);
+      return input?.files?.length > 0;
+    }).length;
+  }
+
+  function refreshState() {
+    const ready = countReady();
+    counter.textContent = `${ready} / 4 files ready`;
+    startBtn.disabled = ready < 4;
+    if (ready >= 4) {
+      counter.classList.add("text-emerald-400");
+      counter.classList.remove("text-[#555872]");
     } else {
-      error?.classList.add("hidden");
+      counter.classList.remove("text-emerald-400");
+      counter.classList.add("text-[#555872]");
+    }
+  }
+
+  // Listen for manual file input changes
+  form.querySelectorAll('input[type="file"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const status = input.closest("label").querySelector(".file-status");
+      if (input.files.length > 0) {
+        status.textContent = input.files[0].name;
+        status.classList.add("text-emerald-400");
+        status.classList.remove("text-[#555872]");
+        input.closest("label").classList.add("has-file");
+      } else {
+        status.textContent = "No file";
+        status.classList.remove("text-emerald-400");
+        status.classList.add("text-[#555872]");
+        input.closest("label").classList.remove("has-file");
+      }
+      refreshState();
+    });
+  });
+
+  // Drag and drop
+  ["dragenter", "dragover"].forEach((ev) =>
+    dropZone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add("border-amber-400", "bg-amber-500/5");
+    })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    dropZone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("border-amber-400", "bg-amber-500/5");
+    })
+  );
+  // Also handle drag on the whole page so users don't accidentally navigate away
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("drop", (e) => e.preventDefault());
+
+  dropZone.addEventListener("drop", (e) => {
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+    let matched = 0;
+    let unmatched = [];
+    for (const file of files) {
+      const slot = detectSlot(file.name);
+      if (slot) {
+        assignFile(file, slot);
+        matched++;
+      } else {
+        unmatched.push(file.name);
+      }
+    }
+    if (unmatched.length > 0) {
+      error.textContent = `Could not auto-detect: ${unmatched.join(", ")}. Please assign manually.`;
+      error.classList.remove("hidden");
+      setTimeout(() => error.classList.add("hidden"), 5000);
+    } else if (matched > 0) {
+      error.classList.add("hidden");
     }
   });
+
+  // Submit validation
+  form.addEventListener("submit", (event) => {
+    const ready = countReady();
+    if (ready < 4) {
+      event.preventDefault();
+      error.textContent = "All 4 files are required: warehouse, obstacles, ceiling, and bay types.";
+      error.classList.remove("hidden");
+    } else {
+      error.classList.add("hidden");
+    }
+  });
+
+  refreshState();
+})();
 </script>
 {% endblock %}

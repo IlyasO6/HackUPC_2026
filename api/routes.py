@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from api_models import (
+    AddBayRequest,
     DeleteBayRequest,
     HealthResponse,
     Job,
@@ -23,6 +24,7 @@ from api_models import (
     OptimizationInput,
     RotateBayRequest,
     ScoreRequest,
+    SuggestBayRequest,
 )
 from bridge import solution_to_api, to_case_data
 from api_config import API_VERSION, DEFAULT_SOLVER_TIME_BUDGET_SECONDS
@@ -123,6 +125,27 @@ async def delete_layout(request: DeleteBayRequest) -> LayoutResponse:
         return await session.delete_bay(bay_id=request.bay_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+
+
+@router.post("/layout/suggest", response_model=LayoutResponse)
+async def suggest_bay(request: SuggestBayRequest) -> LayoutResponse:
+    """Suggest the best bay placement to improve Q in a live session."""
+
+    session = await _require_session(request.session_id)
+    return await session.suggest_bay()
+
+
+@router.post("/layout/add", response_model=LayoutResponse)
+async def add_bay(request: AddBayRequest) -> LayoutResponse:
+    """Manually add a bay to an existing session."""
+
+    session = await _require_session(request.session_id)
+    return await session.add_bay(
+        bay_type_id=request.bay_type_id,
+        x=request.x,
+        y=request.y,
+        rotation=request.rotation,
+    )
 
 
 @router.get("/layout/{session_id}", response_model=LayoutResponse)

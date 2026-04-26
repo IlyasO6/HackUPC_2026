@@ -217,6 +217,16 @@ class HybridSolver(BaseSolver):
             if strategy == "constructive":
                 strategy = "constructive+refine"
 
+        if time.perf_counter() < deadline:
+            filled = self._fill_gaps(
+                state=best_state,
+                case=case,
+                ctx=ctx,
+                deadline=deadline,
+            )
+            if filled.score + FLOAT_TOLERANCE < best_state.score:
+                best_state = filled
+
         elapsed = time.perf_counter() - started_at
         self.last_run_stats = SolverRunStats(
             elapsed_seconds=elapsed,
@@ -739,6 +749,15 @@ class HybridSolver(BaseSolver):
                     continue
                 seen.add(key)
                 points.append(point)
+        for footprint in state.footprints:
+            body = footprint.body
+            for i in range(len(body)):
+                j = (i + 1) % len(body)
+                mid = ((body[i][0] + body[j][0]) / 2, (body[i][1] + body[j][1]) / 2)
+                key = (round(mid[0], 6), round(mid[1], 6))
+                if key not in seen:
+                    seen.add(key)
+                    points.append(mid)
         return points
 
     def _build_row_candidate(
@@ -754,8 +773,8 @@ class HybridSolver(BaseSolver):
         """Build a candidate row starting from ``anchor``."""
 
         bay_type = primary.bay_type
-        step_x = primary.tangent[0] * bay_type.depth
-        step_y = primary.tangent[1] * bay_type.depth
+        step_x = primary.tangent[0] * (bay_type.depth + bay_type.gap)
+        step_y = primary.tangent[1] * (bay_type.depth + bay_type.gap)
         cursor_x, cursor_y = anchor
 
         temporary: list = []
@@ -838,10 +857,10 @@ class HybridSolver(BaseSolver):
         """Return guide points describing a row envelope."""
 
         bay_type = primary.bay_type
-        span_x = primary.tangent[0] * bay_type.depth * slot_count
-        span_y = primary.tangent[1] * bay_type.depth * slot_count
+        span_x = primary.tangent[0] * (bay_type.depth + bay_type.gap) * slot_count
+        span_y = primary.tangent[1] * (bay_type.depth + bay_type.gap) * slot_count
         normal = primary.front_normal
-        far = bay_type.width + bay_type.gap
+        far = bay_type.width
 
         back_start = anchor
         back_end = (anchor[0] + span_x, anchor[1] + span_y)
@@ -1021,12 +1040,12 @@ class HybridSolver(BaseSolver):
         current_anchor = row.anchor
         base_template = self._template(bay_type, row.angle)
         shift_u = (
-            base_template.front_normal[0] * (bay_type.width + bay_type.gap),
-            base_template.front_normal[1] * (bay_type.width + bay_type.gap),
+            base_template.front_normal[0] * bay_type.width,
+            base_template.front_normal[1] * bay_type.width,
         )
         shift_v = (
-            base_template.tangent[0] * bay_type.depth,
-            base_template.tangent[1] * bay_type.depth,
+            base_template.tangent[0] * (bay_type.depth + bay_type.gap),
+            base_template.tangent[1] * (bay_type.depth + bay_type.gap),
         )
         anchor_points = [
             current_anchor,
@@ -1117,6 +1136,62 @@ class HybridSolver(BaseSolver):
             ) ** 2,
         )
         return list(points[:limit])
+
+
+    def _fill_gaps(
+        self,
+        state: LayoutState,
+        case: CaseData,
+        ctx: CaseContext,
+        deadline: float,
+    ) -> LayoutState:
+        """Greedily fill remaining gaps with individual bays."""
+
+        current = state
+        small_first = sorted(
+            case.bay_types,
+            key=lambda bt: (bt.area, bt.price / bt.n_loads, bt.id),
+        )
+
+        while time.perf_counter() < deadline:
+            improved = False
+            for bt in small_first:
+                for angle in self._select_search_angles():
+                    if time.perf_counter() >= deadline:
+                        return current
+                    template = self._template(bt, angle)
+                    xs = self._axis_candidate_x(
+                        case=case, state=current,
+                        width=bt.width, depth=bt.depth, angle=angle,
+                    )
+                    ys = self._axis_candidate_y(
+                        case=case, state=current,
+                        width=bt.width, depth=bt.depth, angle=angle,
+                    )
+                    for y_coord in ys:
+                        if time.perf_counter() >= deadline:
+                            return current
+                        for x_coord in xs:
+                            fp = template.place(float(x_coord), float(y_coord))
+                            if not is_valid_placement(
+                                footprint=fp,
+                                ctx=ctx,
+                                existing=current.footprints,
+                                state=current,
+                            ):
+                                continue
+                            new_q = score_from_totals(
+                                current.total_area + bt.area,
+                                current.total_price + bt.price,
+                                current.total_loads + bt.n_loads,
+                                case.warehouse.area,
+                            )
+                            if new_q + FLOAT_TOLERANCE < current.score:
+                                self._append_footprint(current, fp)
+                                improved = True
+            if not improved:
+                break
+        return current
 
 
 __all__ = ["HybridSolver", "SolverRunStats"]
