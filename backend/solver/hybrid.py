@@ -217,6 +217,16 @@ class HybridSolver(BaseSolver):
             if strategy == "constructive":
                 strategy = "constructive+refine"
 
+        if time.perf_counter() < deadline:
+            filled = self._fill_gaps(
+                state=best_state,
+                case=case,
+                ctx=ctx,
+                deadline=deadline,
+            )
+            if filled.score + FLOAT_TOLERANCE < best_state.score:
+                best_state = filled
+
         elapsed = time.perf_counter() - started_at
         self.last_run_stats = SolverRunStats(
             elapsed_seconds=elapsed,
@@ -739,6 +749,15 @@ class HybridSolver(BaseSolver):
                     continue
                 seen.add(key)
                 points.append(point)
+        for footprint in state.footprints:
+            body = footprint.body
+            for i in range(len(body)):
+                j = (i + 1) % len(body)
+                mid = ((body[i][0] + body[j][0]) / 2, (body[i][1] + body[j][1]) / 2)
+                key = (round(mid[0], 6), round(mid[1], 6))
+                if key not in seen:
+                    seen.add(key)
+                    points.append(mid)
         return points
 
     def _build_row_candidate(
@@ -1117,6 +1136,62 @@ class HybridSolver(BaseSolver):
             ) ** 2,
         )
         return list(points[:limit])
+
+
+    def _fill_gaps(
+        self,
+        state: LayoutState,
+        case: CaseData,
+        ctx: CaseContext,
+        deadline: float,
+    ) -> LayoutState:
+        """Greedily fill remaining gaps with individual bays."""
+
+        current = state
+        small_first = sorted(
+            case.bay_types,
+            key=lambda bt: (bt.area, bt.price / bt.n_loads, bt.id),
+        )
+
+        while time.perf_counter() < deadline:
+            improved = False
+            for bt in small_first:
+                for angle in self._select_search_angles():
+                    if time.perf_counter() >= deadline:
+                        return current
+                    template = self._template(bt, angle)
+                    xs = self._axis_candidate_x(
+                        case=case, state=current,
+                        width=bt.width, depth=bt.depth, angle=angle,
+                    )
+                    ys = self._axis_candidate_y(
+                        case=case, state=current,
+                        width=bt.width, depth=bt.depth, angle=angle,
+                    )
+                    for y_coord in ys:
+                        if time.perf_counter() >= deadline:
+                            return current
+                        for x_coord in xs:
+                            fp = template.place(float(x_coord), float(y_coord))
+                            if not is_valid_placement(
+                                footprint=fp,
+                                ctx=ctx,
+                                existing=current.footprints,
+                                state=current,
+                            ):
+                                continue
+                            new_q = score_from_totals(
+                                current.total_area + bt.area,
+                                current.total_price + bt.price,
+                                current.total_loads + bt.n_loads,
+                                case.warehouse.area,
+                            )
+                            if new_q + FLOAT_TOLERANCE < current.score:
+                                self._append_footprint(current, fp)
+                                improved = True
+            if not improved:
+                break
+        return current
 
 
 __all__ = ["HybridSolver", "SolverRunStats"]
