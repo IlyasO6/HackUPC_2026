@@ -130,6 +130,16 @@ class SuggestBayRequest(BaseModel):
     session_id: str
 
 
+class AddBayRequest(BaseModel):
+    """Manually add a bay to an existing session."""
+
+    session_id: str
+    bay_type_id: int
+    x: float
+    y: float
+    rotation: float = 0.0
+
+
 class ScoreRequest(BaseModel):
     """Request body for the legacy score and validate endpoints."""
 

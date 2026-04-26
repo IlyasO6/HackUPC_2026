@@ -486,3 +486,37 @@ class StatefulLayoutSession:
                 message=f"Suggested {bay_id} (Q improved to {best_q:.2f})",
                 latency_ms=(time.perf_counter() - started_at) * 1000.0,
             )
+
+    async def add_bay(
+        self,
+        bay_type_id: int,
+        x: float,
+        y: float,
+        rotation: float,
+    ) -> "LayoutResponse":
+        """Manually add a bay at specific coordinates."""
+
+        started_at = time.perf_counter()
+        async with self._lock:
+            if bay_type_id not in self.case.bay_type_map:
+                self.touch()
+                return self.snapshot(
+                    message=f"Unknown bay type {bay_type_id}.",
+                    latency_ms=(time.perf_counter() - started_at) * 1000.0,
+                )
+            snapped = snap_rotation(rotation)
+            bay_id = f"bay-{len(self._slots) + 1:04d}"
+            placement = PlacedBay(
+                bay_type_id=bay_type_id,
+                x=x,
+                y=y,
+                rotation=snapped,
+            )
+            self._insert_new_bay(bay_id=bay_id, placement=placement)
+            self._refresh_validity(self.active_slot_indices())
+            self.touch()
+            return self.snapshot(
+                message=f"Added {bay_id}",
+                latency_ms=(time.perf_counter() - started_at) * 1000.0,
+            )
+

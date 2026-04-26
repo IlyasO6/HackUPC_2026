@@ -36,7 +36,7 @@
     .shell {
       display: grid;
       grid-template-columns: 340px minmax(0, 1fr);
-      min-height: 100vh;
+      height: 100vh;
       gap: 24px;
       padding: 24px;
     }
@@ -54,6 +54,8 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
+      overflow-y: auto;
+      max-height: calc(100vh - 48px);
     }
 
     .headline {
@@ -95,7 +97,7 @@
     button {
       width: 100%;
       border-radius: 16px;
-      border: 1px solid rgba(31, 42, 43, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.15);
       font: inherit;
       padding: 14px 16px;
     }
@@ -110,14 +112,16 @@
       font-weight: 600;
       transition: transform 140ms ease, box-shadow 140ms ease,
         background 140ms ease;
-      background: var(--ink);
-      color: #fff8ef;
-      box-shadow: 0 14px 30px rgba(31, 42, 43, 0.16);
+      background: var(--accent);
+      color: #0f1117;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
     }
 
     button.secondary {
       background: var(--panel-strong);
       color: var(--ink);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       box-shadow: none;
     }
 
@@ -200,8 +204,8 @@
 
     svg {
       width: 100%;
-      height: auto;
-      min-height: 540px;
+      height: calc(100vh - 90px);
+      min-height: 400px;
       border-radius: 24px;
       background: #fdfdfd;
       border: 1px solid var(--line);
@@ -325,6 +329,16 @@
         </button>
       </section>
 
+      <section class="control-group">
+        <label for="add-bay-type">Add bay manually</label>
+        <select id="add-bay-type">
+          <option value="">Select bay type...</option>
+        </select>
+        <button id="add-bay-button" class="secondary" type="button" disabled>
+          + Place on layout
+        </button>
+      </section>
+
       <p id="case-meta" class="case-meta" style="font-size:1.1rem;font-weight:700"></p>
     </aside>
 
@@ -359,6 +373,8 @@
       rotateButton: document.getElementById("rotate-button"),
       deleteButton: document.getElementById("delete-button"),
       suggestButton: document.getElementById("suggest-button"),
+      addBayType: document.getElementById("add-bay-type"),
+      addBayButton: document.getElementById("add-bay-button"),
       banner: document.getElementById("banner"),
       caseMeta: document.getElementById("case-meta"),
       metricQ: document.getElementById("metric-q"),
@@ -444,6 +460,7 @@
       }
 
       elements.suggestButton.disabled = !state.layout?.session_id;
+      elements.addBayButton.disabled = !state.layout?.session_id || !elements.addBayType.value;
     }
 
     function currentSelectedBay() {
@@ -813,6 +830,7 @@
       state.bayTypeMap = new Map(
         data.bay_types.map((bayType) => [bayType.id, bayType])
       );
+      populateBayTypeSelector(data.bay_types);
       elements.banner.textContent = `Loaded ${name}`;
       renderScene();
     }
@@ -852,6 +870,7 @@
         state.selectedBayId = null;
         state.previewPositions.clear();
         state.bayTypeMap = new Map(data.bay_types.map((bayType) => [bayType.id, bayType]));
+        populateBayTypeSelector(data.bay_types);
         
         const layoutResp = await fetch(`/api/v1/layout/${sid}`);
         if (!layoutResp.ok) throw new Error("Layout expired or not found");
@@ -871,7 +890,84 @@
     elements.rotateButton.addEventListener("click", rotateSelectedByStep);
     elements.deleteButton.addEventListener("click", deleteSelected);
     elements.suggestButton.addEventListener("click", suggestBay);
+
+    /* --- Manual bay placement --- */
+    let placementMode = null;
+
+    function populateBayTypeSelector(bayTypes) {
+      elements.addBayType.replaceChildren();
+      const defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.textContent = "Select bay type...";
+      elements.addBayType.append(defaultOpt);
+      for (const bt of bayTypes) {
+        const opt = document.createElement("option");
+        opt.value = bt.id;
+        opt.textContent = `Type ${bt.id} — ${bt.width}×${bt.depth} (P/L: ${(bt.price / bt.nLoads).toFixed(0)})`;
+        elements.addBayType.append(opt);
+      }
+    }
+
+    elements.addBayType.addEventListener("change", () => {
+      elements.addBayButton.disabled = !elements.addBayType.value || !state.layout?.session_id;
+    });
+
+    elements.addBayButton.addEventListener("click", () => {
+      const typeId = parseInt(elements.addBayType.value);
+      if (isNaN(typeId)) return;
+      placementMode = { bay_type_id: typeId, angle: 0 };
+      elements.canvas.style.cursor = "crosshair";
+      elements.banner.textContent = "Click on the layout to place the bay. Press Escape to cancel.";
+      elements.banner.className = "banner";
+    });
+
+    function svgPoint(evt) {
+      const svg = elements.canvas;
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX;
+      pt.y = evt.clientY;
+      return pt.matrixTransform(svg.getScreenCTM().inverse());
+    }
+
+    elements.canvas.addEventListener("click", async (e) => {
+      if (!placementMode || !state.layout?.session_id) return;
+      e.stopPropagation();
+      const pt = svgPoint(e);
+      elements.banner.textContent = "Placing bay...";
+      try {
+        const response = await fetch("/api/v1/layout/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: state.layout.session_id,
+            bay_type_id: placementMode.bay_type_id,
+            x: pt.x,
+            y: pt.y,
+            rotation: placementMode.angle,
+          }),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          state.layout = data;
+          renderScene();
+        } else {
+          elements.banner.textContent = data.detail || "Placement failed";
+        }
+      } catch (err) {
+        elements.banner.textContent = err.message;
+      }
+      placementMode = null;
+      elements.canvas.style.cursor = "";
+    });
+
     window.addEventListener("keydown", async (event) => {
+      if (event.key === "Escape" && placementMode) {
+        placementMode = null;
+        elements.canvas.style.cursor = "";
+        elements.banner.textContent = "Placement cancelled.";
+        elements.banner.className = "banner";
+        return;
+      }
       if (event.key === "Delete" || event.key === "Backspace") {
         await deleteSelected();
       }

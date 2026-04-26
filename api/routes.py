@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from api_models import (
+    AddBayRequest,
     DeleteBayRequest,
     HealthResponse,
     Job,
@@ -132,6 +133,19 @@ async def suggest_bay(request: SuggestBayRequest) -> LayoutResponse:
 
     session = await _require_session(request.session_id)
     return await session.suggest_bay()
+
+
+@router.post("/layout/add", response_model=LayoutResponse)
+async def add_bay(request: AddBayRequest) -> LayoutResponse:
+    """Manually add a bay to an existing session."""
+
+    session = await _require_session(request.session_id)
+    return await session.add_bay(
+        bay_type_id=request.bay_type_id,
+        x=request.x,
+        y=request.y,
+        rotation=request.rotation,
+    )
 
 
 @router.get("/layout/{session_id}", response_model=LayoutResponse)
