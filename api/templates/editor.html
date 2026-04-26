@@ -6,17 +6,17 @@
   <title>Mecalux Layout Optimizer</title>
   <style>
     :root {
-      --bg: #f3efe6;
-      --panel: rgba(255, 251, 243, 0.92);
-      --panel-strong: #fffdf8;
-      --ink: #1f2a2b;
-      --muted: #53615f;
-      --accent: #cc5b2e;
-      --accent-soft: rgba(204, 91, 46, 0.12);
-      --good: #2f7d4b;
-      --bad: #c3392a;
-      --line: rgba(31, 42, 43, 0.12);
-      --shadow: 0 24px 60px rgba(43, 35, 24, 0.12);
+      --bg: #0f1117;
+      --panel: rgba(26, 29, 39, 0.95);
+      --panel-strong: #1a1d27;
+      --ink: #e4e4e7;
+      --muted: #9ca3af;
+      --accent: #f59e0b;
+      --accent-soft: rgba(245, 158, 11, 0.12);
+      --good: #22c55e;
+      --bad: #ef4444;
+      --line: rgba(255, 255, 255, 0.08);
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
       --font-display: "Avenir Next", "Segoe UI", sans-serif;
       --font-body: "IBM Plex Sans", "Trebuchet MS", sans-serif;
     }
@@ -30,10 +30,7 @@
       min-height: 100vh;
       color: var(--ink);
       font-family: var(--font-body);
-      background:
-        radial-gradient(circle at top left, #fff7df 0, transparent 38%),
-        radial-gradient(circle at bottom right, #e7d8b7 0, transparent 44%),
-        linear-gradient(135deg, #f0eadc, var(--bg));
+      background: linear-gradient(135deg, #0f1117, #161922);
     }
 
     .shell {
@@ -110,6 +107,7 @@
 
     button {
       cursor: pointer;
+      font-weight: 600;
       transition: transform 140ms ease, box-shadow 140ms ease,
         background 140ms ease;
       background: var(--ink);
@@ -182,14 +180,13 @@
       pointer-events: none;
     }
 
-    .banner,
-    .latency {
+    .banner {
       pointer-events: none;
       border-radius: 999px;
       padding: 10px 14px;
       backdrop-filter: blur(10px);
-      background: rgba(255, 253, 248, 0.88);
-      border: 1px solid rgba(31, 42, 43, 0.1);
+      background: rgba(26, 29, 39, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       font-weight: 700;
     }
 
@@ -203,12 +200,11 @@
 
     svg {
       width: 100%;
-      height: calc(100vh - 84px);
+      height: auto;
       min-height: 540px;
       border-radius: 24px;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 243, 232, 0.95));
-      border: 1px solid rgba(31, 42, 43, 0.12);
+      background: #fdfdfd;
+      border: 1px solid var(--line);
     }
 
     .warehouse {
@@ -277,16 +273,11 @@
   </style>
 </head>
 <body>
-  <a href="/" style="position:fixed;top:18px;left:18px;z-index:100;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:14px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);text-decoration:none;color:var(--ink);font-size:1.2rem;cursor:pointer;transition:transform 120ms ease" title="Back to Home" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">⌂</a>
+  <a href="/" style="position:fixed;top:18px;left:18px;z-index:100;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:14px;background:rgba(26,29,39,0.95);border:1px solid rgba(255,255,255,0.08);box-shadow:0 4px 12px rgba(0,0,0,0.3);text-decoration:none;color:#e4e4e7;font-size:1.2rem;cursor:pointer;transition:transform 120ms ease" title="Back to Home" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">⌂</a>
   <main class="shell">
     <aside class="panel sidebar">
       <section class="headline">
-        <span class="tag">Realtime Layout Session</span>
-        <h1>Warehouse optimizer with live edits.</h1>
-        <p>
-          Optimize once, then drag, rotate, and delete bays without calling the
-          heavy solver again.
-        </p>
+        <h1>Warehouse workspace</h1>
       </section>
 
       <section class="control-group">
@@ -304,7 +295,6 @@
         <article class="metric">
           <span>Q</span>
           <strong id="metric-q">-</strong>
-          <span id="metric-validity">No session</span>
         </article>
         <article class="metric">
           <span>Bays</span>
@@ -335,23 +325,12 @@
         </button>
       </section>
 
-      <p id="case-meta" class="case-meta">
-        Load a testcase to inspect the warehouse and available bays.
-      </p>
-      <p id="message" class="message">
-        Drag updates are sent on pointer release. Double-click a bay to rotate.
-        Press Delete to remove the selected bay.
-      </p>
-      <p class="hint">
-        Invalid bays are painted red immediately from the API response. Rotation
-        is snapped to the nearest 30-degree step before every PATCH request.
-      </p>
+      <p id="case-meta" class="case-meta" style="font-size:1.1rem;font-weight:700"></p>
     </aside>
 
     <section class="panel canvas-wrap">
       <div class="canvas-header">
         <div id="banner" class="banner">Awaiting testcase</div>
-        <div id="latency" class="latency">Patch latency --</div>
       </div>
       <svg id="canvas" viewBox="0 0 1000 700">
         <g id="warehouse-layer"></g>
@@ -381,15 +360,12 @@
       deleteButton: document.getElementById("delete-button"),
       suggestButton: document.getElementById("suggest-button"),
       banner: document.getElementById("banner"),
-      latency: document.getElementById("latency"),
-      message: document.getElementById("message"),
       caseMeta: document.getElementById("case-meta"),
       metricQ: document.getElementById("metric-q"),
       metricBays: document.getElementById("metric-bays"),
       metricLoads: document.getElementById("metric-loads"),
       metricArea: document.getElementById("metric-area"),
       metricCoverage: document.getElementById("metric-coverage"),
-      metricValidity: document.getElementById("metric-validity"),
       metricSelected: document.getElementById("metric-selected"),
       metricRotation: document.getElementById("metric-rotation"),
       canvas: document.getElementById("canvas"),
@@ -448,34 +424,23 @@
       elements.metricArea.textContent = `Area ${fmtNumber(layout?.total_bay_area ?? 0, 0)}`;
       elements.metricCoverage.textContent =
         `Coverage ${fmtNumber((layout?.coverage ?? 0) * 100, 2)}%`;
-      elements.metricValidity.textContent = layout
-        ? layout.valid ? "Valid layout" : "Conflicts detected"
-        : "No session";
       elements.metricSelected.textContent = selected
         ? selected.instance_id
         : "-";
       elements.metricRotation.textContent = selected
-        ? `Rotation ${fmtNumber(selected.rotation, 0)}°`
+        ? `Rotation ${Number(selected.rotation ?? 0).toFixed(0)}°`
         : "Rotation -";
 
       const bannerText = layout?.message ?? "Awaiting testcase";
       elements.banner.textContent = bannerText;
       elements.banner.className =
         "banner " + (layout ? (layout.valid ? "valid" : "invalid") : "");
-      elements.latency.textContent = layout?.latency_ms != null
-        ? `Patch latency ${fmtNumber(layout.latency_ms, 2)} ms`
-        : layout?.solved_in_ms != null
-          ? `Solve time ${layout.solved_in_ms} ms`
-          : "Patch latency --";
-      elements.message.textContent = layout?.message ??
-        "Drag updates are sent on pointer release.";
 
       const caseData = state.caseData;
       if (caseData) {
-        elements.caseMeta.textContent =
-          `${caseData.warehouse.length} warehouse vertices, ` +
-          `${caseData.obstacles.length} obstacles, ` +
-          `${caseData.bay_types.length} bay types.`;
+        elements.caseMeta.innerHTML =
+          `<strong>${caseData.obstacles.length}</strong> obstacles · ` +
+          `<strong>${caseData.bay_types.length}</strong> bay types`;
       }
 
       elements.suggestButton.disabled = !state.layout?.session_id;
