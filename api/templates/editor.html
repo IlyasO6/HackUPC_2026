@@ -339,6 +339,12 @@
         </button>
       </section>
 
+      <section class="control-group">
+        <button id="download-csv-button" class="secondary" type="button" disabled>
+          ⬇ Download CSV
+        </button>
+      </section>
+
       <p id="case-meta" class="case-meta" style="font-size:1.1rem;font-weight:700"></p>
     </aside>
 
@@ -375,6 +381,7 @@
       suggestButton: document.getElementById("suggest-button"),
       addBayType: document.getElementById("add-bay-type"),
       addBayButton: document.getElementById("add-bay-button"),
+      downloadCsvButton: document.getElementById("download-csv-button"),
       banner: document.getElementById("banner"),
       caseMeta: document.getElementById("case-meta"),
       metricQ: document.getElementById("metric-q"),
@@ -461,6 +468,7 @@
 
       elements.suggestButton.disabled = !state.layout?.session_id;
       elements.addBayButton.disabled = !state.layout?.session_id || !elements.addBayType.value;
+      elements.downloadCsvButton.disabled = !state.layout?.bays?.length;
     }
 
     function currentSelectedBay() {
@@ -890,6 +898,25 @@
     elements.rotateButton.addEventListener("click", rotateSelectedByStep);
     elements.deleteButton.addEventListener("click", deleteSelected);
     elements.suggestButton.addEventListener("click", suggestBay);
+
+    /* --- Download CSV --- */
+    elements.downloadCsvButton.addEventListener("click", () => {
+      if (!state.layout?.bays?.length) return;
+      const fmtVal = (v) => {
+        const n = Number(v);
+        return Number.isInteger(n) ? String(n) : n.toFixed(6).replace(/\.?0+$/, "");
+      };
+      const lines = state.layout.bays.map(
+        (b) => `${b.bay_type_id}, ${fmtVal(b.x)}, ${fmtVal(b.y)}, ${fmtVal(b.rotation)}`
+      );
+      const blob = new Blob([lines.join("\n") + "\n"], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "solution.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
 
     /* --- Manual bay placement --- */
     let placementMode = null;
