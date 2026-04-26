@@ -434,3 +434,55 @@ class StatefulLayoutSession:
         self.total_area -= bay_type.area
         self.total_price -= bay_type.price
         self.total_loads -= bay_type.n_loads
+
+    async def suggest_bay(self) -> "LayoutResponse":
+        """Find and add the best single bay placement that reduces Q."""
+
+        started_at = time.perf_counter()
+        async with self._lock:
+            current_q = self.q_value or float("inf")
+            best_footprint: PlacedFootprint | None = None
+            best_q = current_q
+
+            for bt in self.case.bay_types:
+                for angle_deg in range(0, 360, 30):
+                    template = self._template(bt.id, float(angle_deg))
+                    for ref_x, ref_y in self.ctx.reference_points:
+                        footprint = template.place(float(ref_x), float(ref_y))
+                        issues = placement_violations(
+                            footprint=footprint,
+                            ctx=self.ctx,
+                            existing=self._footprints,
+                            state=self._state_view,
+                        )
+                        if issues:
+                            continue
+                        new_area = self.total_area + bt.area
+                        new_price = self.total_price + bt.price
+                        new_loads = self.total_loads + bt.n_loads
+                        candidate_q = score_from_totals(
+                            new_area, new_price, new_loads,
+                            self.case.warehouse.area,
+                        )
+                        if candidate_q < best_q:
+                            best_q = candidate_q
+                            best_footprint = footprint
+
+            if best_footprint is None:
+                self.touch()
+                return self.snapshot(
+                    message="No improving placement found.",
+                    latency_ms=(time.perf_counter() - started_at) * 1000.0,
+                )
+
+            bay_id = f"bay-{len(self._slots) + 1:04d}"
+            self._insert_new_bay(
+                bay_id=bay_id,
+                placement=best_footprint.placement,
+            )
+            self._refresh_validity(self.active_slot_indices())
+            self.touch()
+            return self.snapshot(
+                message=f"Suggested {bay_id} (Q improved to {best_q:.2f})",
+                latency_ms=(time.perf_counter() - started_at) * 1000.0,
+            )

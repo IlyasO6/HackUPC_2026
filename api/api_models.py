@@ -124,6 +124,12 @@ class DeleteBayRequest(BaseModel):
     bay_id: str
 
 
+class SuggestBayRequest(BaseModel):
+    """Request to suggest the best bay to add to an existing session."""
+
+    session_id: str
+
+
 class ScoreRequest(BaseModel):
     """Request body for the legacy score and validate endpoints."""
 

@@ -330,6 +330,9 @@
         <button id="delete-button" class="secondary" type="button">
           Delete selected
         </button>
+        <button id="suggest-button" class="secondary" type="button" disabled>
+          ✨ Suggest bay
+        </button>
       </section>
 
       <p id="case-meta" class="case-meta">
@@ -376,6 +379,7 @@
       optimiseButton: document.getElementById("optimise-button"),
       rotateButton: document.getElementById("rotate-button"),
       deleteButton: document.getElementById("delete-button"),
+      suggestButton: document.getElementById("suggest-button"),
       banner: document.getElementById("banner"),
       latency: document.getElementById("latency"),
       message: document.getElementById("message"),
@@ -473,6 +477,8 @@
           `${caseData.obstacles.length} obstacles, ` +
           `${caseData.bay_types.length} bay types.`;
       }
+
+      elements.suggestButton.disabled = !state.layout?.session_id;
     }
 
     function currentSelectedBay() {
@@ -772,6 +778,26 @@
       }
     }
 
+    async function suggestBay() {
+      if (!state.layout?.session_id) return;
+      setBusy(true, "Finding best placement...");
+      try {
+        const response = await fetch("/api/v1/layout/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: state.layout.session_id }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Suggestion failed");
+        state.layout = data;
+        renderScene();
+      } catch (error) {
+        elements.message.textContent = error.message;
+      } finally {
+        setBusy(false);
+      }
+    }
+
     async function sendPatch(url, payload) {
       try {
         const response = await fetch(url, {
@@ -879,6 +905,7 @@
     elements.optimiseButton.addEventListener("click", optimiseLayout);
     elements.rotateButton.addEventListener("click", rotateSelectedByStep);
     elements.deleteButton.addEventListener("click", deleteSelected);
+    elements.suggestButton.addEventListener("click", suggestBay);
     window.addEventListener("keydown", async (event) => {
       if (event.key === "Delete" || event.key === "Backspace") {
         await deleteSelected();
