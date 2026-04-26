@@ -529,18 +529,18 @@
       ];
       const gap = type.gap > 0
         ? [
-            [origin.x + type.width * ux, origin.y + type.width * uy],
-            [
-              origin.x + (type.width + type.gap) * ux,
-              origin.y + (type.width + type.gap) * uy,
-            ],
-            [
-              origin.x + (type.width + type.gap) * ux + type.depth * vx,
-              origin.y + (type.width + type.gap) * uy + type.depth * vy,
-            ],
+            [origin.x + type.depth * vx, origin.y + type.depth * vy],
             [
               origin.x + type.width * ux + type.depth * vx,
               origin.y + type.width * uy + type.depth * vy,
+            ],
+            [
+              origin.x + type.width * ux + (type.depth + type.gap) * vx,
+              origin.y + type.width * uy + (type.depth + type.gap) * vy,
+            ],
+            [
+              origin.x + (type.depth + type.gap) * vx,
+              origin.y + (type.depth + type.gap) * vy,
             ],
           ]
         : [];

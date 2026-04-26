@@ -61,13 +61,13 @@ class PlacementTemplate:
         gap_local: list[Point] = []
         if bt.gap > 0:
             gap_local = [
-                (bt.width * u[0], bt.width * u[1]),
-                ((bt.width + bt.gap) * u[0], (bt.width + bt.gap) * u[1]),
-                (
-                    (bt.width + bt.gap) * u[0] + bt.depth * v[0],
-                    (bt.width + bt.gap) * u[1] + bt.depth * v[1],
-                ),
+                (bt.depth * v[0], bt.depth * v[1]),
                 (bt.width * u[0] + bt.depth * v[0], bt.width * u[1] + bt.depth * v[1]),
+                (
+                    bt.width * u[0] + (bt.depth + bt.gap) * v[0],
+                    bt.width * u[1] + (bt.depth + bt.gap) * v[1],
+                ),
+                ((bt.depth + bt.gap) * v[0], (bt.depth + bt.gap) * v[1]),
             ]
 
         single_offsets = self._build_single_feature_offsets(u, v)
@@ -93,22 +93,22 @@ class PlacementTemplate:
 
     def _build_single_feature_offsets(self, u: Point, v: Point) -> tuple[Point, ...]:
         bt = self.bay_type
-        width = bt.width + bt.gap
+        depth = bt.depth + bt.gap
         return (
             (0.0, 0.0),
-            (width * u[0], width * u[1]),
-            (width * u[0] + bt.depth * v[0], width * u[1] + bt.depth * v[1]),
-            (bt.depth * v[0], bt.depth * v[1]),
+            (bt.width * u[0], bt.width * u[1]),
+            (bt.width * u[0] + depth * v[0], bt.width * u[1] + depth * v[1]),
+            (depth * v[0], depth * v[1]),
         )
 
     def _build_pair_feature_offsets(self, u: Point, v: Point) -> tuple[Point, ...]:
         bt = self.bay_type
-        far = bt.width + bt.gap
+        far = bt.depth + bt.gap
         return (
-            (-far * u[0], -far * u[1]),
-            (far * u[0], far * u[1]),
-            (far * u[0] + bt.depth * v[0], far * u[1] + bt.depth * v[1]),
-            (-far * u[0] + bt.depth * v[0], -far * u[1] + bt.depth * v[1]),
+            (-far * v[0], -far * v[1]),
+            (bt.width * u[0] - far * v[0], bt.width * u[1] - far * v[1]),
+            (bt.width * u[0] + far * v[0], bt.width * u[1] + far * v[1]),
+            (far * v[0], far * v[1]),
         )
 
     def place(self, x: float, y: float) -> "PlacedFootprint":

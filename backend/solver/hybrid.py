@@ -754,8 +754,8 @@ class HybridSolver(BaseSolver):
         """Build a candidate row starting from ``anchor``."""
 
         bay_type = primary.bay_type
-        step_x = primary.tangent[0] * bay_type.depth
-        step_y = primary.tangent[1] * bay_type.depth
+        step_x = primary.tangent[0] * (bay_type.depth + bay_type.gap)
+        step_y = primary.tangent[1] * (bay_type.depth + bay_type.gap)
         cursor_x, cursor_y = anchor
 
         temporary: list = []
@@ -838,10 +838,10 @@ class HybridSolver(BaseSolver):
         """Return guide points describing a row envelope."""
 
         bay_type = primary.bay_type
-        span_x = primary.tangent[0] * bay_type.depth * slot_count
-        span_y = primary.tangent[1] * bay_type.depth * slot_count
+        span_x = primary.tangent[0] * (bay_type.depth + bay_type.gap) * slot_count
+        span_y = primary.tangent[1] * (bay_type.depth + bay_type.gap) * slot_count
         normal = primary.front_normal
-        far = bay_type.width + bay_type.gap
+        far = bay_type.width
 
         back_start = anchor
         back_end = (anchor[0] + span_x, anchor[1] + span_y)
@@ -1021,12 +1021,12 @@ class HybridSolver(BaseSolver):
         current_anchor = row.anchor
         base_template = self._template(bay_type, row.angle)
         shift_u = (
-            base_template.front_normal[0] * (bay_type.width + bay_type.gap),
-            base_template.front_normal[1] * (bay_type.width + bay_type.gap),
+            base_template.front_normal[0] * bay_type.width,
+            base_template.front_normal[1] * bay_type.width,
         )
         shift_v = (
-            base_template.tangent[0] * bay_type.depth,
-            base_template.tangent[1] * bay_type.depth,
+            base_template.tangent[0] * (bay_type.depth + bay_type.gap),
+            base_template.tangent[1] * (bay_type.depth + bay_type.gap),
         )
         anchor_points = [
             current_anchor,

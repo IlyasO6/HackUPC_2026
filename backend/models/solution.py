@@ -47,16 +47,16 @@ class PlacedBay:
         ]
 
     def gap_zone(self, width: int, depth: int, gap: int) -> list[tuple[float, float]]:
-        """4 corners of the gap zone extending from the front face."""
+        """4 corners of the gap zone extending from the depth edge (top face)."""
         if gap <= 0:
             return []
         theta = math.radians(self.rotation)
         c, s = math.cos(theta), math.sin(theta)
         return [
-            self._transform(width, 0, c, s),
-            self._transform(width + gap, 0, c, s),
-            self._transform(width + gap, depth, c, s),
+            self._transform(0, depth, c, s),
             self._transform(width, depth, c, s),
+            self._transform(width, depth + gap, c, s),
+            self._transform(0, depth + gap, c, s),
         ]
 
     def aabb(self, width: int, depth: int) -> tuple[float, float, float, float]:
