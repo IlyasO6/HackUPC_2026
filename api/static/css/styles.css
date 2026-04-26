@@ -34,9 +34,9 @@ body {
 
 .home-screen {
   background:
-    linear-gradient(135deg, rgba(144, 196, 232, 0.20), transparent 38%),
-    linear-gradient(315deg, rgba(244, 162, 97, 0.18), transparent 36%),
-    #f7fbff;
+    linear-gradient(135deg, rgba(59, 130, 246, 0.06), transparent 38%),
+    linear-gradient(315deg, rgba(244, 162, 97, 0.05), transparent 36%),
+    #0f1117;
 }
 
 .home-panel,
@@ -46,15 +46,15 @@ body {
 
 .file-input {
   width: 100%;
-  color: #475569;
+  color: #8b8fa3;
   font-size: 0.82rem;
 }
 
 .file-input::file-selector-button {
-  background: #0066b3;
+  background: #f59e0b;
   border: 0;
   border-radius: 999px;
-  color: #fff;
+  color: #0f1117;
   cursor: pointer;
   font-weight: 800;
   margin-right: 10px;
@@ -67,37 +67,60 @@ body {
 
 .file-field {
   align-items: center;
-  background: #fff;
-  border: 1px solid #dbeafe;
-  border-radius: 18px;
+  background: #1a1d2a;
+  border: 1px solid #2a2d3e;
+  border-radius: 16px;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 150px minmax(0, 1fr);
-  padding: 10px 12px;
+  gap: 6px;
+  grid-template-columns: 1fr;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease;
 }
 
-.file-field span {
-  color: #4c91c6;
-  font-size: 12px;
-  font-weight: 900;
+.file-field:hover {
+  border-color: #f59e0b40;
+  background: #1e2133;
 }
 
-.file-field input {
-  color: #64748b;
+.file-field.has-file {
+  border-color: #22c55e40;
+  background: #111827;
+}
+
+.file-field span:first-child {
+  color: #c5c9d6;
   font-size: 12px;
+  font-weight: 800;
+}
+
+.file-field .file-status {
+  color: #555872;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.file-field input[type="file"] {
+  color: #8b8fa3;
+  font-size: 11px;
   min-width: 0;
 }
 
-.file-field input::file-selector-button {
-  background: #dbeafe;
+.file-field input[type="file"]::file-selector-button {
+  background: #2a2d3e;
   border: 0;
   border-radius: 999px;
-  color: #2563eb;
+  color: #f59e0b;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
-  margin-right: 10px;
-  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  margin-right: 8px;
+  padding: 5px 10px;
+  transition: background 180ms ease;
+}
+
+.file-field input[type="file"]::file-selector-button:hover {
+  background: #363a4e;
 }
 
 .file-field.compact {
@@ -107,7 +130,7 @@ body {
 }
 
 .enter-button {
-  min-width: 118px;
+  min-width: 140px;
 }
 
 .font-display {
