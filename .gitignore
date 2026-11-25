@@ -2,13 +2,14 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+.vscode/
 # OS
 .DS_Store
 
 # Environments
 .env
 .venv
+.venv311/
 env/
 venv/
 ENV/
